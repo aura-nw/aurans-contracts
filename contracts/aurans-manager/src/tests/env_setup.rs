@@ -132,6 +132,7 @@ pub mod env {
                 Addr::unchecked(ADMIN),
                 &ResolverInstantiateMsg {
                     admin: ADMIN.to_string(),
+                    name_contract: name_contract_addr.to_string(),
                 },
                 &[],
                 "test instantiate contract",
