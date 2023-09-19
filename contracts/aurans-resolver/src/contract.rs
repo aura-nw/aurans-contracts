@@ -66,7 +66,7 @@ pub fn execute(
             name,
             bech32_prefix,
             address,
-        } => execute_set_record(deps, env, info, name, bech32_prefix, address),
+        } => execute_update_record(deps, env, info, name, bech32_prefix, address),
         ExecuteMsg::DeleteRecord {
             name,
             bech32_prefix,
@@ -112,7 +112,7 @@ fn execute_update_config(
     Ok(Response::new().add_attributes([("action", "update_config"), ("admin", &admin)]))
 }
 
-fn execute_set_record(
+fn execute_update_record(
     deps: DepsMut,
     _env: Env,
     info: MessageInfo,
@@ -126,7 +126,7 @@ fn execute_set_record(
     }
     records().save(deps.storage, (&name, &bech32_prefix), &address)?;
     Ok(Response::new()
-        .add_attribute("action", "set_record")
+        .add_attribute("action", "update_record")
         .add_attribute("name", &name)
         .add_attribute("bech32_prefix", &bech32_prefix)
         .add_attribute("address", &address))
