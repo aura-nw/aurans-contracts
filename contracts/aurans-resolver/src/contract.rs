@@ -9,8 +9,7 @@ use crate::error::ContractError;
 use crate::state::{records, Config, CONFIG};
 
 use crate::msg::{
-    AddressOfResponse, AddressesOfResponse, ExecuteMsg, InstantiateMsg, MigrateMsg, NamesResponse,
-    QueryMsg,
+    AddressResponse, ExecuteMsg, InstantiateMsg, MigrateMsg, NamesResponse, QueryMsg,
 };
 
 // version info for migration info
@@ -63,7 +62,7 @@ pub fn execute(
             admin,
             name_contract,
         } => execute_update_config(deps, env, info, admin, name_contract),
-        ExecuteMsg::SetRecord {
+        ExecuteMsg::UpdateRecord {
             name,
             bech32_prefix,
             address,
@@ -83,7 +82,7 @@ pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<Binary> {
             primary_name,
             bech32_prefix,
         } => to_binary(&query_address_of(deps, primary_name, bech32_prefix)?),
-        QueryMsg::AddressesOf { primary_name } => {
+        QueryMsg::AllAddressesOf { primary_name } => {
             to_binary(&query_addresses_of(deps, primary_name)?)
         }
         QueryMsg::Names { owner, limit } => to_binary(&query_names(deps, owner, limit)?),
@@ -159,14 +158,17 @@ fn query_address_of(
     deps: Deps,
     primary_name: String,
     bech32_prefix: String,
-) -> StdResult<AddressOfResponse> {
+) -> StdResult<AddressResponse> {
     let key = (primary_name.as_ref(), bech32_prefix.as_ref());
     let addr = records().load(deps.storage, key)?;
-    Ok(AddressOfResponse { address: addr })
+    Ok(AddressResponse {
+        address: addr,
+        bech32_prefix: bech32_prefix,
+    })
 }
 
-fn query_addresses_of(deps: Deps, primary_name: String) -> StdResult<AddressesOfResponse> {
-    let mut addresses: Vec<(String, String)> = Vec::new();
+fn query_addresses_of(deps: Deps, primary_name: String) -> StdResult<Vec<AddressResponse>> {
+    let mut addresses: Vec<AddressResponse> = Vec::new();
 
     let records = records()
         .prefix(&primary_name)
@@ -174,10 +176,13 @@ fn query_addresses_of(deps: Deps, primary_name: String) -> StdResult<AddressesOf
         .collect::<StdResult<Vec<_>>>()?;
 
     for record in records {
-        addresses.push(record);
+        addresses.push(AddressResponse {
+            address: record.0,
+            bech32_prefix: record.1,
+        });
     }
 
-    Ok(AddressesOfResponse { addresses })
+    Ok(addresses)
 }
 
 fn query_names(deps: Deps, owner: String, limit: Option<u32>) -> StdResult<NamesResponse> {

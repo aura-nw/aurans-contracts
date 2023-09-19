@@ -21,7 +21,7 @@ pub enum ExecuteMsg {
         admin: String,
         name_contract: String,
     },
-    SetRecord {
+    UpdateRecord {
         name: String,
         bech32_prefix: String,
         address: String,
@@ -43,28 +43,23 @@ pub enum QueryMsg {
     #[returns(Config)]
     Config {},
 
-    #[returns(AddressesOfResponse)]
+    #[returns(AddressResponse)]
     AddressOf {
         primary_name: String,
         bech32_prefix: String,
     },
 
-    #[returns(AddressesOfResponse)]
-    AddressesOf { primary_name: String },
+    #[returns(Vec<AddressResponse>)]
+    AllAddressesOf { primary_name: String },
 
     #[returns(NamesResponse)]
     Names { owner: String, limit: Option<u32> },
 }
 
 #[cw_serde]
-pub struct AddressOfResponse {
+pub struct AddressResponse {
     pub address: String,
-}
-
-#[cw_serde]
-pub struct AddressesOfResponse {
-    // A list of pair (address, bech32_prefix)
-    pub addresses: Vec<(String, String)>,
+    pub bech32_prefix: String,
 }
 
 #[cw_serde]

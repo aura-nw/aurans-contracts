@@ -8,10 +8,14 @@
     "description": "Message type for `instantiate` entry_point",
     "type": "object",
     "required": [
-      "admin"
+      "admin",
+      "name_contract"
     ],
     "properties": {
       "admin": {
+        "type": "string"
+      },
+      "name_contract": {
         "type": "string"
       }
     },
@@ -31,10 +35,68 @@
           "update_config": {
             "type": "object",
             "required": [
-              "admin"
+              "admin",
+              "name_contract"
             ],
             "properties": {
               "admin": {
+                "type": "string"
+              },
+              "name_contract": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "additionalProperties": false
+      },
+      {
+        "type": "object",
+        "required": [
+          "update_record"
+        ],
+        "properties": {
+          "update_record": {
+            "type": "object",
+            "required": [
+              "address",
+              "bech32_prefix",
+              "name"
+            ],
+            "properties": {
+              "address": {
+                "type": "string"
+              },
+              "bech32_prefix": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "additionalProperties": false
+      },
+      {
+        "type": "object",
+        "required": [
+          "delete_record"
+        ],
+        "properties": {
+          "delete_record": {
+            "type": "object",
+            "required": [
+              "bech32_prefix",
+              "name"
+            ],
+            "properties": {
+              "bech32_prefix": {
+                "type": "string"
+              },
+              "name": {
                 "type": "string"
               }
             },
@@ -62,21 +124,144 @@
           }
         },
         "additionalProperties": false
+      },
+      {
+        "type": "object",
+        "required": [
+          "address_of"
+        ],
+        "properties": {
+          "address_of": {
+            "type": "object",
+            "required": [
+              "bech32_prefix",
+              "primary_name"
+            ],
+            "properties": {
+              "bech32_prefix": {
+                "type": "string"
+              },
+              "primary_name": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "additionalProperties": false
+      },
+      {
+        "type": "object",
+        "required": [
+          "all_addresses_of"
+        ],
+        "properties": {
+          "all_addresses_of": {
+            "type": "object",
+            "required": [
+              "primary_name"
+            ],
+            "properties": {
+              "primary_name": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "additionalProperties": false
+      },
+      {
+        "type": "object",
+        "required": [
+          "names"
+        ],
+        "properties": {
+          "names": {
+            "type": "object",
+            "required": [
+              "owner"
+            ],
+            "properties": {
+              "limit": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "format": "uint32",
+                "minimum": 0.0
+              },
+              "owner": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "additionalProperties": false
       }
     ]
   },
   "migrate": null,
   "sudo": null,
   "responses": {
+    "address_of": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "AddressResponse",
+      "type": "object",
+      "required": [
+        "address",
+        "bech32_prefix"
+      ],
+      "properties": {
+        "address": {
+          "type": "string"
+        },
+        "bech32_prefix": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
+    "all_addresses_of": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "Array_of_AddressResponse",
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/AddressResponse"
+      },
+      "definitions": {
+        "AddressResponse": {
+          "type": "object",
+          "required": [
+            "address",
+            "bech32_prefix"
+          ],
+          "properties": {
+            "address": {
+              "type": "string"
+            },
+            "bech32_prefix": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false
+        }
+      }
+    },
     "config": {
       "$schema": "http://json-schema.org/draft-07/schema#",
       "title": "Config",
       "type": "object",
       "required": [
-        "admin"
+        "admin",
+        "name_contract"
       ],
       "properties": {
         "admin": {
+          "$ref": "#/definitions/Addr"
+        },
+        "name_contract": {
           "$ref": "#/definitions/Addr"
         }
       },
@@ -87,6 +272,23 @@
           "type": "string"
         }
       }
+    },
+    "names": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "NamesResponse",
+      "type": "object",
+      "required": [
+        "names"
+      ],
+      "properties": {
+        "names": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "additionalProperties": false
     }
   }
 }

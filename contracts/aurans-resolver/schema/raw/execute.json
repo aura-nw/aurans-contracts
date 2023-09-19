@@ -12,10 +12,68 @@
         "update_config": {
           "type": "object",
           "required": [
-            "admin"
+            "admin",
+            "name_contract"
           ],
           "properties": {
             "admin": {
+              "type": "string"
+            },
+            "name_contract": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "required": [
+        "update_record"
+      ],
+      "properties": {
+        "update_record": {
+          "type": "object",
+          "required": [
+            "address",
+            "bech32_prefix",
+            "name"
+          ],
+          "properties": {
+            "address": {
+              "type": "string"
+            },
+            "bech32_prefix": {
+              "type": "string"
+            },
+            "name": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "required": [
+        "delete_record"
+      ],
+      "properties": {
+        "delete_record": {
+          "type": "object",
+          "required": [
+            "bech32_prefix",
+            "name"
+          ],
+          "properties": {
+            "bech32_prefix": {
+              "type": "string"
+            },
+            "name": {
               "type": "string"
             }
           },
