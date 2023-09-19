@@ -45,10 +45,18 @@ pub enum QueryMsg {
     },
 
     #[returns(Vec<AddressResponse>)]
-    AllAddressesOf { primary_name: String },
+    AllAddressesOf {
+        primary_name: String,
+        start_after: Option<String>,
+        limit: Option<u32>,
+    },
 
     #[returns(NamesResponse)]
-    Names { owner: String, limit: Option<u32> },
+    Names {
+        owner: String,
+        start_after: Option<String>,
+        limit: Option<u32>,
+    },
 }
 
 #[cw_serde]

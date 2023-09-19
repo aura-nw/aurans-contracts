@@ -4,6 +4,7 @@ use cosmwasm_std::{
     to_binary, Addr, Binary, Deps, DepsMut, Env, MessageInfo, Order, Response, StdResult,
 };
 use cw2::set_contract_version;
+use cw_storage_plus::Bound;
 
 use crate::error::ContractError;
 use crate::state::{records, Config, CONFIG};
@@ -15,6 +16,9 @@ use crate::msg::{
 // version info for migration info
 const CONTRACT_NAME: &str = "crates.io:aurans-resolver";
 const CONTRACT_VERSION: &str = env!("CARGO_PKG_VERSION");
+
+const DEFAULT_LIMIT: u32 = 10;
+const MAX_LIMIT: u32 = 100;
 
 /// Handling contract instantiation
 #[cfg_attr(not(feature = "library"), entry_point)]
@@ -82,10 +86,21 @@ pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<Binary> {
             primary_name,
             bech32_prefix,
         } => to_binary(&query_address_of(deps, primary_name, bech32_prefix)?),
-        QueryMsg::AllAddressesOf { primary_name } => {
-            to_binary(&query_all_addresses_of(deps, primary_name)?)
-        }
-        QueryMsg::Names { owner, limit } => to_binary(&query_names(deps, owner, limit)?),
+        QueryMsg::AllAddressesOf {
+            primary_name,
+            start_after,
+            limit,
+        } => to_binary(&query_all_addresses_of(
+            deps,
+            primary_name,
+            start_after,
+            limit,
+        )?),
+        QueryMsg::Names {
+            owner,
+            start_after,
+            limit,
+        } => to_binary(&query_names(deps, owner, start_after, limit)?),
     }
 }
 
@@ -167,12 +182,21 @@ fn query_address_of(
     })
 }
 
-fn query_all_addresses_of(deps: Deps, primary_name: String) -> StdResult<Vec<AddressResponse>> {
+fn query_all_addresses_of(
+    deps: Deps,
+    primary_name: String,
+    start_after: Option<String>,
+    limit: Option<u32>,
+) -> StdResult<Vec<AddressResponse>> {
+    let limit = limit.unwrap_or(DEFAULT_LIMIT).min(MAX_LIMIT) as usize;
+    let start = start_after.map(|s| Bound::ExclusiveRaw(s.into()));
+
     let mut addresses: Vec<AddressResponse> = Vec::new();
 
     let records = records()
         .prefix(&primary_name)
-        .range(deps.storage, None, None, Order::Ascending)
+        .range(deps.storage, start, None, Order::Ascending)
+        .take(limit)
         .collect::<StdResult<Vec<_>>>()?;
 
     for record in records {
@@ -185,13 +209,20 @@ fn query_all_addresses_of(deps: Deps, primary_name: String) -> StdResult<Vec<Add
     Ok(addresses)
 }
 
-fn query_names(deps: Deps, owner: String, limit: Option<u32>) -> StdResult<NamesResponse> {
-    let limit = limit.unwrap_or(10) as usize;
+fn query_names(
+    deps: Deps,
+    owner: String,
+    start_after: Option<String>,
+    limit: Option<u32>,
+) -> StdResult<NamesResponse> {
+    let limit = limit.unwrap_or(DEFAULT_LIMIT).min(MAX_LIMIT) as usize;
+    let start = start_after.map(|s| Bound::ExclusiveRaw(s.into()));
+
     let names = records()
         .idx
         .address
         .prefix(owner)
-        .keys(deps.storage, None, None, Order::Ascending)
+        .keys(deps.storage, start, None, Order::Ascending)
         .take(limit)
         .collect::<StdResult<Vec<_>>>()?;
     Ok(NamesResponse { names })
