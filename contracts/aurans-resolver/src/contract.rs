@@ -83,7 +83,7 @@ pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<Binary> {
             bech32_prefix,
         } => to_binary(&query_address_of(deps, primary_name, bech32_prefix)?),
         QueryMsg::AllAddressesOf { primary_name } => {
-            to_binary(&query_addresses_of(deps, primary_name)?)
+            to_binary(&query_all_addresses_of(deps, primary_name)?)
         }
         QueryMsg::Names { owner, limit } => to_binary(&query_names(deps, owner, limit)?),
     }
@@ -167,7 +167,7 @@ fn query_address_of(
     })
 }
 
-fn query_addresses_of(deps: Deps, primary_name: String) -> StdResult<Vec<AddressResponse>> {
+fn query_all_addresses_of(deps: Deps, primary_name: String) -> StdResult<Vec<AddressResponse>> {
     let mut addresses: Vec<AddressResponse> = Vec::new();
 
     let records = records()
