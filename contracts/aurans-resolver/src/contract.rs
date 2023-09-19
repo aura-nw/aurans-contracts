@@ -33,10 +33,10 @@ pub fn instantiate(
     };
     CONFIG.save(deps.storage, &config)?;
 
-    Ok(
-        Response::new()
-            .add_attributes([("action", "instantiate"), ("admin", info.sender.as_ref())]),
-    )
+    Ok(Response::new()
+        .add_attribute("action", "instantiate")
+        .add_attribute("admin", info.sender.as_ref())
+        .add_attribute("name_contract", &msg.name_contract.to_owned()))
 }
 
 #[cfg_attr(not(feature = "library"), entry_point)]
@@ -197,14 +197,13 @@ fn query_names(deps: Deps, owner: String, limit: Option<u32>) -> StdResult<Names
     Ok(NamesResponse { names })
 }
 
+// Return true if sender is admin or address of name contract
 fn can_execute(config: &Config, sender: &Addr) -> bool {
-    // Return true if sender is admin
-    if config.admin == sender.to_string() {
-        return true;
+    if sender.to_string() == config.admin {
+        true
+    } else if sender.to_string() == config.name_contract {
+        true
+    } else {
+        false
     }
-    // Return true if sender is address of name contract
-    if config.name_contract == sender.to_string() {
-        return true;
-    }
-    false
 }

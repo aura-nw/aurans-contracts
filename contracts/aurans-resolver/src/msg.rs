@@ -1,11 +1,6 @@
 use cosmwasm_schema::{cw_serde, QueryResponses};
-use cosmwasm_std::Addr;
 
-#[cw_serde]
-pub struct Config {
-    pub admin: Addr,
-    pub name_contract: Addr,
-}
+use crate::state::Config;
 
 /// Message type for `instantiate` entry_point
 #[cw_serde]
