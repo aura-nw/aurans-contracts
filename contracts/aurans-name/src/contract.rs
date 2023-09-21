@@ -1,23 +1,42 @@
 #[cfg(not(feature = "library"))]
 use cosmwasm_std::entry_point;
-use cosmwasm_std::{to_binary, Binary, Deps, DepsMut, Env, MessageInfo, Response, StdResult};
+use cosmwasm_std::{
+    to_binary, Binary, Deps, DepsMut, Empty, Env, MessageInfo, Response, StdResult, WasmMsg,
+};
 use cw2::set_contract_version;
+use cw721::{ContractInfoResponse, Cw721ReceiveMsg};
+use cw721_base::Cw721Contract;
+use cw721_base::ExecuteMsg::{
+    Approve, ApproveAll, Burn, Extension, Mint, Revoke, RevokeAll, SendNft, TransferNft,
+    UpdateOwnership,
+};
+
+use aurans_resolver::ExecuteMsg::UpdateRecord;
+use cw721_base::state::TokenInfo;
 
 use crate::error::ContractError;
-use crate::state::{Config, CONFIG};
+use crate::state::{Config, Metadata, CONFIG};
 
-use crate::msg::{ExecuteMsg, InstantiateMsg, MigrateMsg, QueryMsg};
+use crate::msg::{ExecuteMsg, InstantiateMsg, MigrateMsg, NameExecuteMsg, QueryMsg};
 
 // version info for migration info
 const CONTRACT_NAME: &str = "crates.io:aurans-name";
 const CONTRACT_VERSION: &str = env!("CARGO_PKG_VERSION");
+
+const AURANS_NAME: &str = "aurans-name";
+const AURANS_SYMBOL: &str = "aurans";
+
+/// This contract extends the Cw721 contract from CosmWasm to create non-fungible tokens (NFTs)
+/// that represent unique names. Each name is represented as a unique NFT.
+/// It inherits and builds upon the functionality provided by the Cw721 contract.
+pub type NameCw721<'a> = Cw721Contract<'a, Metadata, Empty, NameExecuteMsg, Empty>;
 
 /// Handling contract instantiation
 #[cfg_attr(not(feature = "library"), entry_point)]
 pub fn instantiate(
     deps: DepsMut,
     _env: Env,
-    info: MessageInfo,
+    _info: MessageInfo,
     msg: InstantiateMsg,
 ) -> Result<Response, ContractError> {
     set_contract_version(deps.storage, CONTRACT_NAME, CONTRACT_VERSION)?;
@@ -25,13 +44,26 @@ pub fn instantiate(
     // save contract config
     let config = Config {
         admin: deps.api.addr_validate(&msg.admin)?,
+        resolver_contract: deps.api.addr_validate(&msg.resolver_contract)?,
     };
     CONFIG.save(deps.storage, &config)?;
 
-    Ok(
-        Response::new()
-            .add_attributes([("action", "instantiate"), ("admin", info.sender.as_ref())]),
-    )
+    let name_cw721 = NameCw721::default();
+
+    // Save contract info
+    let info = ContractInfoResponse {
+        name: AURANS_NAME.to_owned(),
+        symbol: AURANS_SYMBOL.to_owned(),
+    };
+    name_cw721.contract_info.save(deps.storage, &info)?;
+
+    // initialize owner
+    cw_ownable::initialize_owner(deps.storage, deps.api, Some(&msg.minter))?;
+
+    Ok(Response::new()
+        .add_attribute("action", "instantiate")
+        .add_attribute("admin", &msg.admin.to_string())
+        .add_attribute("resolver_contract", &msg.resolver_contract.to_string()))
 }
 
 #[cfg_attr(not(feature = "library"), entry_point)]
@@ -51,17 +83,196 @@ pub fn execute(
     info: MessageInfo,
     msg: ExecuteMsg,
 ) -> Result<Response, ContractError> {
-    let _api = deps.api;
+    let name_cw721 = NameCw721::default();
+    let config = CONFIG.load(deps.storage)?;
     match msg {
-        ExecuteMsg::UpdateConfig { admin } => execute_update_config(deps, env, info, admin),
+        TransferNft {
+            recipient,
+            token_id,
+        } => execute_transfer_nft(deps, env, info, &name_cw721, recipient, token_id, &config),
+        SendNft {
+            contract,
+            token_id,
+            msg,
+        } => execute_send_nft(
+            deps,
+            env,
+            info,
+            &name_cw721,
+            contract,
+            token_id,
+            msg,
+            &config,
+        ),
+        Mint {
+            token_id,
+            owner,
+            token_uri,
+            extension,
+        } => execute_mint(
+            deps,
+            env,
+            info,
+            &name_cw721,
+            token_id,
+            owner,
+            token_uri,
+            extension,
+            &config,
+        ),
+        Extension { msg } => match msg {
+            NameExecuteMsg::UpdateConfig {
+                admin,
+                resolver_contract,
+            } => execute_update_config(deps, env, info, admin, resolver_contract),
+            NameExecuteMsg::ExtendTTL { token_id, new_ttl } => {
+                execute_extend_ttl(deps, env, info, &name_cw721, token_id, new_ttl)
+            }
+            NameExecuteMsg::EvictBatch { token_ids } => {
+                execute_evict_batch(deps, env, info, &name_cw721, token_ids)
+            }
+        },
+        msg @ Approve { .. }
+        | msg @ ApproveAll { .. }
+        | msg @ Burn { .. }
+        | msg @ UpdateOwnership { .. }
+        | msg @ Revoke { .. }
+        | msg @ RevokeAll { .. } => name_cw721.execute(deps, env, info, msg).map_err(Into::into),
     }
 }
 
-pub fn execute_update_config(
+fn execute_mint(
+    deps: DepsMut,
+    _env: Env,
+    info: MessageInfo,
+    name_cw721: &NameCw721,
+    token_id: String,
+    owner: String,
+    token_uri: Option<String>,
+    extension: Metadata,
+    config: &Config,
+) -> Result<Response, ContractError> {
+    cw_ownable::assert_owner(deps.storage, &info.sender)
+        .map_err(|_| ContractError::Unauthorized {})?;
+
+    let token = TokenInfo {
+        owner: deps.api.addr_validate(&owner)?,
+        approvals: vec![],
+        token_uri: token_uri,
+        extension: extension.clone(),
+    };
+
+    name_cw721
+        .tokens
+        .update(deps.storage, &token_id, |old| match old {
+            Some(_) => Err(ContractError::CW721Base(
+                cw721_base::ContractError::Claimed {},
+            )),
+            None => Ok(token.clone()),
+        })?;
+    name_cw721.increment_tokens(deps.storage)?;
+
+    let metadata = token.extension;
+    let update_record = UpdateRecord {
+        name: token_id.clone(),
+        list_bech32_prefix: metadata.bech32_prefix_registed,
+        address: owner.clone(),
+    };
+    let update_resolver_msg = WasmMsg::Execute {
+        contract_addr: config.resolver_contract.to_string(),
+        msg: to_binary(&update_record)?,
+        funds: vec![],
+    };
+
+    Ok(Response::new()
+        .add_message(update_resolver_msg)
+        .add_attribute("action", "mint")
+        .add_attribute("minter", info.sender)
+        .add_attribute("owner", owner)
+        .add_attribute("token_id", token_id)
+        .add_attribute(
+            "bech32_prefix_registed",
+            extension
+                .bech32_prefix_registed
+                .into_iter()
+                .collect::<String>(),
+        )
+        .add_attribute("ttl", extension.ttl.to_string()))
+}
+
+fn execute_transfer_nft(
+    deps: DepsMut,
+    env: Env,
+    info: MessageInfo,
+    name_cw721: &NameCw721,
+    recipient: String,
+    token_id: String,
+    config: &Config,
+) -> Result<Response, ContractError> {
+    let token = name_cw721._transfer_nft(deps, &env, &info, &recipient, &token_id)?;
+    let metadata = token.extension;
+    let update_record = UpdateRecord {
+        name: token_id.clone(),
+        list_bech32_prefix: metadata.bech32_prefix_registed,
+        address: recipient.clone(),
+    };
+    let update_resolver_msg = WasmMsg::Execute {
+        contract_addr: config.resolver_contract.to_string(),
+        msg: to_binary(&update_record)?,
+        funds: vec![],
+    };
+
+    Ok(Response::new()
+        .add_message(update_resolver_msg)
+        .add_attribute("action", "transfer_nft")
+        .add_attribute("sender", info.sender)
+        .add_attribute("recipient", recipient)
+        .add_attribute("token_id", token_id))
+}
+
+fn execute_send_nft(
+    deps: DepsMut,
+    env: Env,
+    info: MessageInfo,
+    name_cw721: &NameCw721,
+    contract: String,
+    token_id: String,
+    msg: Binary,
+    config: &Config,
+) -> Result<Response, ContractError> {
+    let token = name_cw721._transfer_nft(deps, &env, &info, &contract, &token_id)?;
+    let send = Cw721ReceiveMsg {
+        sender: info.sender.to_string(),
+        token_id: token_id.clone(),
+        msg,
+    };
+    let metadata = token.extension;
+    let update_record = UpdateRecord {
+        name: token_id.clone(),
+        list_bech32_prefix: metadata.bech32_prefix_registed,
+        address: contract.clone(),
+    };
+    let update_resolver_msg = WasmMsg::Execute {
+        contract_addr: config.resolver_contract.to_string(),
+        msg: to_binary(&update_record)?,
+        funds: vec![],
+    };
+    // Send message and update resolver
+    Ok(Response::new()
+        .add_message(send.into_cosmos_msg(contract.clone())?)
+        .add_message(update_resolver_msg)
+        .add_attribute("action", "send_nft")
+        .add_attribute("sender", info.sender)
+        .add_attribute("recipient", contract)
+        .add_attribute("token_id", token_id))
+}
+
+fn execute_update_config(
     deps: DepsMut,
     _env: Env,
     info: MessageInfo,
     admin: String,
+    resolver_contract: String,
 ) -> Result<Response, ContractError> {
     // only contract admin can update config
     let config = CONFIG.load(deps.storage)?;
@@ -72,16 +283,74 @@ pub fn execute_update_config(
     // update config
     let new_config = Config {
         admin: deps.api.addr_validate(&admin)?,
+        resolver_contract: deps.api.addr_validate(&resolver_contract)?,
     };
     CONFIG.save(deps.storage, &new_config)?;
 
-    Ok(Response::new().add_attributes([("action", "update_config"), ("admin", &admin)]))
+    Ok(Response::new()
+        .add_attribute("action", "update_config")
+        .add_attribute("admin", &admin)
+        .add_attribute("resolver_contract", &resolver_contract))
+}
+
+fn execute_extend_ttl(
+    deps: DepsMut,
+    env: Env,
+    info: MessageInfo,
+    name_cw721: &NameCw721,
+    token_id: String,
+    new_ttl: u64,
+) -> Result<Response, ContractError> {
+    let mut token = name_cw721.tokens.load(deps.storage, &token_id)?;
+    name_cw721.check_can_send(deps.as_ref(), &env, &info, &token)?;
+    let old_metadata = token.extension;
+    token.extension = Metadata {
+        bech32_prefix_registed: old_metadata.bech32_prefix_registed,
+        ttl: new_ttl,
+        is_expried: None,
+    };
+    name_cw721.tokens.save(deps.storage, &token_id, &token)?;
+    Ok(Response::new()
+        .add_attribute("action", "extend_ttl")
+        .add_attribute("token_id", &token_id)
+        .add_attribute("new_ttl", new_ttl.to_string()))
+}
+
+const DEFAULT_LIMIT_BACTH: usize = 10;
+
+fn execute_evict_batch(
+    deps: DepsMut,
+    env: Env,
+    info: MessageInfo,
+    name_cw721: &NameCw721,
+    token_ids: Vec<String>,
+) -> Result<Response, ContractError> {
+    if token_ids.len() > DEFAULT_LIMIT_BACTH {
+        return Err(ContractError::BatchTooLong {});
+    }
+    for token_id in &token_ids {
+        let token = name_cw721.tokens.load(deps.storage, &token_id)?;
+        name_cw721.check_can_send(deps.as_ref(), &env, &info, &token)?;
+        name_cw721.tokens.remove(deps.storage, &token_id)?;
+        name_cw721.decrement_tokens(deps.storage)?;
+    }
+    // Delete records has burn to resolver
+    Ok(Response::new()
+        .add_attribute("action", "evict_batch")
+        .add_attribute("sender", &info.sender)
+        .add_attribute("token_ids", token_ids.into_iter().collect::<String>()))
 }
 
 #[cfg_attr(not(feature = "library"), entry_point)]
-pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<Binary> {
+pub fn query(deps: Deps, env: Env, msg: QueryMsg) -> StdResult<Binary> {
     match msg {
         QueryMsg::Config {} => to_binary(&query_config(deps)?),
+
+        // Default query by cw721
+        _ => {
+            let name_cw721 = NameCw721::default();
+            name_cw721.query(deps, env, msg.into())
+        }
     }
 }
 

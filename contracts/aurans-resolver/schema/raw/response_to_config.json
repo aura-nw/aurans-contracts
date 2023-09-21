@@ -3,14 +3,10 @@
   "title": "Config",
   "type": "object",
   "required": [
-    "admin",
-    "name_contract"
+    "admin"
   ],
   "properties": {
     "admin": {
-      "$ref": "#/definitions/Addr"
-    },
-    "name_contract": {
       "$ref": "#/definitions/Addr"
     }
   },

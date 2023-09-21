@@ -1,4 +1,5 @@
 use cosmwasm_schema::{cw_serde, QueryResponses};
+use cosmwasm_std::Addr;
 
 use crate::state::Config;
 
@@ -6,7 +7,6 @@ use crate::state::Config;
 #[cw_serde]
 pub struct InstantiateMsg {
     pub admin: String,
-    pub name_contract: String,
 }
 
 /// Message type for `execute` entry_point
@@ -14,16 +14,18 @@ pub struct InstantiateMsg {
 pub enum ExecuteMsg {
     UpdateConfig {
         admin: String,
+    },
+    UpdateNameContract {
         name_contract: String,
     },
     UpdateRecord {
         name: String,
-        bech32_prefix: String,
+        list_bech32_prefix: Vec<String>,
         address: String,
     },
     DeleteRecord {
         name: String,
-        bech32_prefix: String,
+        list_bech32_prefix: Vec<String>,
     },
 }
 
@@ -37,6 +39,9 @@ pub enum MigrateMsg {}
 pub enum QueryMsg {
     #[returns(Config)]
     Config {},
+
+    #[returns(Addr)]
+    NameContract {},
 
     #[returns(AddressResponse)]
     AddressOf {

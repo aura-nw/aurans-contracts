@@ -14,4 +14,11 @@ pub enum ContractError {
 
     #[error("Already registered")]
     UserRegistered {},
+
+    // Wrapper cw721 error
+    #[error("{0}")]
+    CW721Base(#[from] cw721_base::ContractError),
+
+    #[error("Batch too long")]
+    BatchTooLong {},
 }

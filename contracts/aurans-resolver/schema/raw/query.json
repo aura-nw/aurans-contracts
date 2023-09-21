@@ -19,6 +19,19 @@
     {
       "type": "object",
       "required": [
+        "name_contract"
+      ],
+      "properties": {
+        "name_contract": {
+          "type": "object",
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "required": [
         "address_of"
       ],
       "properties": {
