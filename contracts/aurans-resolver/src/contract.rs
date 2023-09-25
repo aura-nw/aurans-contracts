@@ -73,6 +73,7 @@ pub fn execute(
         ExecuteMsg::UpdateNameContract { name_contract } => {
             execute_update_name_contract(deps, env, info, name_contract)
         }
+        ExecuteMsg::DeleteNames { names } => execute_delete_names(deps, env, info, names),
     }
 }
 
@@ -186,6 +187,24 @@ fn execute_delete_record(
             "list_bech32_prefix",
             &list_bech32_prefix.into_iter().collect::<String>(),
         ))
+}
+
+fn execute_delete_names(
+    deps: DepsMut,
+    _env: Env,
+    info: MessageInfo,
+    names: Vec<String>,
+) -> Result<Response, ContractError> {
+    let config = CONFIG.load(deps.storage)?;
+    can_execute(deps.as_ref(), &config, &info.sender)?;
+
+    for name in &names {
+        records().prefix(name).clear(deps.storage, None);
+    }
+
+    Ok(Response::new()
+        .add_attribute("action", "delete_batch_record")
+        .add_attribute("names", names.into_iter().collect::<String>()))
 }
 
 fn query_config(deps: Deps) -> StdResult<Config> {

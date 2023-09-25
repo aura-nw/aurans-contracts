@@ -11,7 +11,7 @@ use cw721_base::ExecuteMsg::{
     UpdateOwnership,
 };
 
-use aurans_resolver::ExecuteMsg::UpdateRecord;
+use aurans_resolver::ExecuteMsg::{DeleteNames, UpdateRecord};
 use cw721_base::state::TokenInfo;
 
 use crate::error::ContractError;
@@ -129,7 +129,7 @@ pub fn execute(
                 execute_extend_ttl(deps, env, info, &name_cw721, token_id, new_ttl)
             }
             NameExecuteMsg::EvictBatch { token_ids } => {
-                execute_evict_batch(deps, env, info, &name_cw721, token_ids)
+                execute_evict_batch(deps, env, info, &name_cw721, token_ids, &config)
             }
         },
         msg @ Approve { .. }
@@ -324,6 +324,7 @@ fn execute_evict_batch(
     info: MessageInfo,
     name_cw721: &NameCw721,
     token_ids: Vec<String>,
+    config: &Config,
 ) -> Result<Response, ContractError> {
     if token_ids.len() > DEFAULT_LIMIT_BACTH {
         return Err(ContractError::BatchTooLong {});
@@ -335,7 +336,17 @@ fn execute_evict_batch(
         name_cw721.decrement_tokens(deps.storage)?;
     }
     // Delete records has burn to resolver
+    let delete_names = DeleteNames {
+        names: token_ids.clone(),
+    };
+    let delete_resolver_msg = WasmMsg::Execute {
+        contract_addr: config.resolver_contract.to_string(),
+        msg: to_binary(&delete_names)?,
+        funds: vec![],
+    };
+
     Ok(Response::new()
+        .add_message(delete_resolver_msg)
         .add_attribute("action", "evict_batch")
         .add_attribute("sender", &info.sender)
         .add_attribute("token_ids", token_ids.into_iter().collect::<String>()))

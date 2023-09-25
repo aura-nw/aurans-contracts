@@ -123,6 +123,30 @@
           }
         },
         "additionalProperties": false
+      },
+      {
+        "type": "object",
+        "required": [
+          "delete_names"
+        ],
+        "properties": {
+          "delete_names": {
+            "type": "object",
+            "required": [
+              "names"
+            ],
+            "properties": {
+              "names": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "additionalProperties": false
       }
     ]
   },

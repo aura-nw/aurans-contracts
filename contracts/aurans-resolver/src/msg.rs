@@ -27,6 +27,9 @@ pub enum ExecuteMsg {
         name: String,
         list_bech32_prefix: Vec<String>,
     },
+    DeleteNames {
+        names: Vec<String>,
+    },
 }
 
 /// Message type for `migrate` entry_point
