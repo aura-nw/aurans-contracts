@@ -319,7 +319,7 @@ const DEFAULT_LIMIT_BACTH: usize = 10;
 
 fn execute_evict_batch(
     deps: DepsMut,
-    env: Env,
+    _env: Env,
     info: MessageInfo,
     token_ids: Vec<String>,
 ) -> Result<Response, ContractError> {
@@ -333,8 +333,6 @@ fn execute_evict_batch(
 
     let name_cw721 = NameCw721::default();
     for token_id in &token_ids {
-        let token = name_cw721.tokens.load(deps.storage, &token_id)?;
-        name_cw721.check_can_send(deps.as_ref(), &env, &info, &token)?;
         name_cw721.tokens.remove(deps.storage, &token_id)?;
         name_cw721.decrement_tokens(deps.storage)?;
     }
