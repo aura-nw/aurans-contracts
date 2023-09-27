@@ -7,17 +7,20 @@ use cw2::set_contract_version;
 use cw721::{ContractInfoResponse, Cw721ReceiveMsg};
 use cw721_base::Cw721Contract;
 use cw721_base::ExecuteMsg::{
-    Approve, ApproveAll, Burn, Extension, Mint, Revoke, RevokeAll, SendNft, TransferNft,
-    UpdateOwnership,
+    Approve, ApproveAll, Burn, Extension as EExtension, Mint, Revoke, RevokeAll, SendNft,
+    TransferNft, UpdateOwnership,
 };
+
+use cw721_base::QueryMsg::Extension as QExtension;
 
 use aurans_resolver::ExecuteMsg::{DeleteNames, UpdateRecord};
 use cw721_base::state::TokenInfo;
+use cw_utils::Expiration;
 
 use crate::error::ContractError;
 use crate::state::{Config, Metadata, CONFIG};
 
-use crate::msg::{ExecuteMsg, InstantiateMsg, MigrateMsg, NameExecuteMsg, QueryMsg};
+use crate::msg::{ExecuteMsg, InstantiateMsg, MigrateMsg, NameExecuteMsg, NameQueryMsg, QueryMsg};
 
 // version info for migration info
 const CONTRACT_NAME: &str = "crates.io:aurans-name";
@@ -29,7 +32,7 @@ const AURANS_SYMBOL: &str = "aurans";
 /// This contract extends the Cw721 contract from CosmWasm to create non-fungible tokens (NFTs)
 /// that represent unique names. Each name is represented as a unique NFT.
 /// It inherits and builds upon the functionality provided by the Cw721 contract.
-pub type NameCw721<'a> = Cw721Contract<'a, Metadata, Empty, NameExecuteMsg, Empty>;
+pub type NameCw721<'a> = Cw721Contract<'a, Metadata, Empty, NameExecuteMsg, NameQueryMsg>;
 
 /// Handling contract instantiation
 #[cfg_attr(not(feature = "library"), entry_point)]
@@ -63,7 +66,8 @@ pub fn instantiate(
     Ok(Response::new()
         .add_attribute("action", "instantiate")
         .add_attribute("admin", &msg.admin.to_string())
-        .add_attribute("resolver_contract", &msg.resolver_contract.to_string()))
+        .add_attribute("resolver_contract", &msg.resolver_contract.to_string())
+        .add_attribute("minter", msg.minter.to_string()))
 }
 
 #[cfg_attr(not(feature = "library"), entry_point)]
@@ -83,53 +87,36 @@ pub fn execute(
     info: MessageInfo,
     msg: ExecuteMsg,
 ) -> Result<Response, ContractError> {
-    let name_cw721 = NameCw721::default();
-    let config = CONFIG.load(deps.storage)?;
     match msg {
         TransferNft {
             recipient,
             token_id,
-        } => execute_transfer_nft(deps, env, info, &name_cw721, recipient, token_id, &config),
+        } => execute_transfer_nft(deps, env, info, recipient, token_id),
         SendNft {
             contract,
             token_id,
             msg,
-        } => execute_send_nft(
-            deps,
-            env,
-            info,
-            &name_cw721,
-            contract,
-            token_id,
-            msg,
-            &config,
-        ),
+        } => execute_send_nft(deps, env, info, contract, token_id, msg),
         Mint {
             token_id,
             owner,
             token_uri,
             extension,
-        } => execute_mint(
-            deps,
-            env,
-            info,
-            &name_cw721,
-            token_id,
-            owner,
-            token_uri,
-            extension,
-            &config,
-        ),
-        Extension { msg } => match msg {
+        } => execute_mint(deps, env, info, token_id, owner, token_uri, extension),
+        EExtension { msg } => match msg {
             NameExecuteMsg::UpdateConfig {
                 admin,
                 resolver_contract,
             } => execute_update_config(deps, env, info, admin, resolver_contract),
-            NameExecuteMsg::ExtendTTL { token_id, new_ttl } => {
-                execute_extend_ttl(deps, env, info, &name_cw721, token_id, new_ttl)
-            }
+            NameExecuteMsg::ExtendTTL {
+                token_id,
+                new_expires,
+            } => execute_extend_ttl(deps, env, info, token_id, new_expires),
             NameExecuteMsg::EvictBatch { token_ids } => {
-                execute_evict_batch(deps, env, info, &name_cw721, token_ids, &config)
+                execute_evict_batch(deps, env, info, token_ids)
+            }
+            NameExecuteMsg::UpdateResolver { resolver } => {
+                execute_update_resolver(deps, env, info, resolver)
             }
         },
         msg @ Approve { .. }
@@ -137,7 +124,10 @@ pub fn execute(
         | msg @ Burn { .. }
         | msg @ UpdateOwnership { .. }
         | msg @ Revoke { .. }
-        | msg @ RevokeAll { .. } => name_cw721.execute(deps, env, info, msg).map_err(Into::into),
+        | msg @ RevokeAll { .. } => {
+            let name_cw721 = NameCw721::default();
+            name_cw721.execute(deps, env, info, msg).map_err(Into::into)
+        }
     }
 }
 
@@ -145,12 +135,10 @@ fn execute_mint(
     deps: DepsMut,
     _env: Env,
     info: MessageInfo,
-    name_cw721: &NameCw721,
     token_id: String,
     owner: String,
     token_uri: Option<String>,
     extension: Metadata,
-    config: &Config,
 ) -> Result<Response, ContractError> {
     cw_ownable::assert_owner(deps.storage, &info.sender)
         .map_err(|_| ContractError::Unauthorized {})?;
@@ -161,7 +149,7 @@ fn execute_mint(
         token_uri: token_uri,
         extension: extension.clone(),
     };
-
+    let name_cw721 = NameCw721::default();
     name_cw721
         .tokens
         .update(deps.storage, &token_id, |old| match old {
@@ -178,6 +166,7 @@ fn execute_mint(
         list_bech32_prefix: metadata.bech32_prefix_registed,
         address: owner.clone(),
     };
+    let config = CONFIG.load(deps.storage)?;
     let update_resolver_msg = WasmMsg::Execute {
         contract_addr: config.resolver_contract.to_string(),
         msg: to_binary(&update_record)?,
@@ -197,18 +186,18 @@ fn execute_mint(
                 .into_iter()
                 .collect::<String>(),
         )
-        .add_attribute("ttl", extension.ttl.to_string()))
+        .add_attribute("ttl", extension.expires.to_string()))
 }
 
 fn execute_transfer_nft(
     deps: DepsMut,
     env: Env,
     info: MessageInfo,
-    name_cw721: &NameCw721,
     recipient: String,
     token_id: String,
-    config: &Config,
 ) -> Result<Response, ContractError> {
+    let config = CONFIG.load(deps.storage)?;
+    let name_cw721 = NameCw721::default();
     let token = name_cw721._transfer_nft(deps, &env, &info, &recipient, &token_id)?;
     let metadata = token.extension;
     let update_record = UpdateRecord {
@@ -234,12 +223,12 @@ fn execute_send_nft(
     deps: DepsMut,
     env: Env,
     info: MessageInfo,
-    name_cw721: &NameCw721,
     contract: String,
     token_id: String,
     msg: Binary,
-    config: &Config,
 ) -> Result<Response, ContractError> {
+    let config = CONFIG.load(deps.storage)?;
+    let name_cw721 = NameCw721::default();
     let token = name_cw721._transfer_nft(deps, &env, &info, &contract, &token_id)?;
     let send = Cw721ReceiveMsg {
         sender: info.sender.to_string(),
@@ -265,6 +254,30 @@ fn execute_send_nft(
         .add_attribute("sender", info.sender)
         .add_attribute("recipient", contract)
         .add_attribute("token_id", token_id))
+}
+
+fn execute_update_resolver(
+    deps: DepsMut,
+    _env: Env,
+    info: MessageInfo,
+    resolver: String,
+) -> Result<Response, ContractError> {
+    // only contract admin can update resolver
+    let config = CONFIG.load(deps.storage)?;
+    if config.admin != info.sender {
+        return Err(ContractError::Unauthorized {});
+    }
+
+    // update config with new resolver
+    let new_config = Config {
+        admin: config.admin,
+        resolver_contract: deps.api.addr_validate(&resolver)?,
+    };
+    CONFIG.save(deps.storage, &new_config)?;
+
+    Ok(Response::new()
+        .add_attribute("action", "update_resolver")
+        .add_attribute("resolver", resolver))
 }
 
 fn execute_update_config(
@@ -297,23 +310,21 @@ fn execute_extend_ttl(
     deps: DepsMut,
     env: Env,
     info: MessageInfo,
-    name_cw721: &NameCw721,
     token_id: String,
-    new_ttl: u64,
+    expires: Expiration,
 ) -> Result<Response, ContractError> {
+    let name_cw721 = NameCw721::default();
     let mut token = name_cw721.tokens.load(deps.storage, &token_id)?;
     name_cw721.check_can_send(deps.as_ref(), &env, &info, &token)?;
-    let old_metadata = token.extension;
-    token.extension = Metadata {
-        bech32_prefix_registed: old_metadata.bech32_prefix_registed,
-        ttl: new_ttl,
-        is_expried: None,
-    };
+    let old_metadata = token.extension.clone();
+    token.extension.bech32_prefix_registed = old_metadata.bech32_prefix_registed;
+    token.extension.expires = expires;
+
     name_cw721.tokens.save(deps.storage, &token_id, &token)?;
     Ok(Response::new()
         .add_attribute("action", "extend_ttl")
         .add_attribute("token_id", &token_id)
-        .add_attribute("new_ttl", new_ttl.to_string()))
+        .add_attribute("new_ttl", expires.to_string()))
 }
 
 const DEFAULT_LIMIT_BACTH: usize = 10;
@@ -322,13 +333,17 @@ fn execute_evict_batch(
     deps: DepsMut,
     env: Env,
     info: MessageInfo,
-    name_cw721: &NameCw721,
     token_ids: Vec<String>,
-    config: &Config,
 ) -> Result<Response, ContractError> {
     if token_ids.len() > DEFAULT_LIMIT_BACTH {
         return Err(ContractError::BatchTooLong {});
     }
+    let config = CONFIG.load(deps.storage)?;
+    if config.admin != info.sender {
+        return Err(ContractError::Unauthorized {});
+    }
+
+    let name_cw721 = NameCw721::default();
     for token_id in &token_ids {
         let token = name_cw721.tokens.load(deps.storage, &token_id)?;
         name_cw721.check_can_send(deps.as_ref(), &env, &info, &token)?;
@@ -339,6 +354,7 @@ fn execute_evict_batch(
     let delete_names = DeleteNames {
         names: token_ids.clone(),
     };
+    let config = CONFIG.load(deps.storage)?;
     let delete_resolver_msg = WasmMsg::Execute {
         contract_addr: config.resolver_contract.to_string(),
         msg: to_binary(&delete_names)?,
@@ -355,12 +371,13 @@ fn execute_evict_batch(
 #[cfg_attr(not(feature = "library"), entry_point)]
 pub fn query(deps: Deps, env: Env, msg: QueryMsg) -> StdResult<Binary> {
     match msg {
-        QueryMsg::Config {} => to_binary(&query_config(deps)?),
-
         // Default query by cw721
+        QExtension { msg } => match msg {
+            NameQueryMsg::Config {} => to_binary(&query_config(deps)?),
+        },
         _ => {
             let name_cw721 = NameCw721::default();
-            name_cw721.query(deps, env, msg.into())
+            name_cw721.query(deps, env, msg)
         }
     }
 }

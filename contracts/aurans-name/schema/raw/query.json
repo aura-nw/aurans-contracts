@@ -1,22 +1,9 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
   "title": "QueryMsg",
-  "description": "Message type for `query` entry_point",
   "oneOf": [
     {
-      "type": "object",
-      "required": [
-        "config"
-      ],
-      "properties": {
-        "config": {
-          "type": "object",
-          "additionalProperties": false
-        }
-      },
-      "additionalProperties": false
-    },
-    {
+      "description": "Return the owner of the given token, error if token does not exist",
       "type": "object",
       "required": [
         "owner_of"
@@ -29,6 +16,7 @@
           ],
           "properties": {
             "include_expired": {
+              "description": "unset or false will filter out expired approvals, you must set to true to see them",
               "type": [
                 "boolean",
                 "null"
@@ -44,6 +32,7 @@
       "additionalProperties": false
     },
     {
+      "description": "Return operator that can access all of the owner's tokens.",
       "type": "object",
       "required": [
         "approval"
@@ -75,6 +64,7 @@
       "additionalProperties": false
     },
     {
+      "description": "Return approvals that a token has",
       "type": "object",
       "required": [
         "approvals"
@@ -102,6 +92,39 @@
       "additionalProperties": false
     },
     {
+      "description": "Return approval of a given operator for all tokens of an owner, error if not set",
+      "type": "object",
+      "required": [
+        "operator"
+      ],
+      "properties": {
+        "operator": {
+          "type": "object",
+          "required": [
+            "operator",
+            "owner"
+          ],
+          "properties": {
+            "include_expired": {
+              "type": [
+                "boolean",
+                "null"
+              ]
+            },
+            "operator": {
+              "type": "string"
+            },
+            "owner": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    {
+      "description": "List all operators that can access all of the owner's tokens",
       "type": "object",
       "required": [
         "all_operators"
@@ -114,6 +137,7 @@
           ],
           "properties": {
             "include_expired": {
+              "description": "unset or false will filter out expired items, you must set to true to see them",
               "type": [
                 "boolean",
                 "null"
@@ -143,6 +167,7 @@
       "additionalProperties": false
     },
     {
+      "description": "Total number of tokens issued",
       "type": "object",
       "required": [
         "num_tokens"
@@ -156,6 +181,7 @@
       "additionalProperties": false
     },
     {
+      "description": "With MetaData Extension. Returns top-level metadata about the contract",
       "type": "object",
       "required": [
         "contract_info"
@@ -169,6 +195,7 @@
       "additionalProperties": false
     },
     {
+      "description": "With MetaData Extension. Returns metadata about one particular token, based on *ERC721 Metadata JSON Schema* but directly from the contract",
       "type": "object",
       "required": [
         "nft_info"
@@ -190,6 +217,7 @@
       "additionalProperties": false
     },
     {
+      "description": "With MetaData Extension. Returns the result of both `NftInfo` and `OwnerOf` as one query as an optimization for clients",
       "type": "object",
       "required": [
         "all_nft_info"
@@ -202,6 +230,7 @@
           ],
           "properties": {
             "include_expired": {
+              "description": "unset or false will filter out expired approvals, you must set to true to see them",
               "type": [
                 "boolean",
                 "null"
@@ -217,6 +246,7 @@
       "additionalProperties": false
     },
     {
+      "description": "With Enumerable extension. Returns all tokens owned by the given address, [] if unset.",
       "type": "object",
       "required": [
         "tokens"
@@ -252,6 +282,7 @@
       "additionalProperties": false
     },
     {
+      "description": "With Enumerable extension. Requires pagination. Lists all token_ids controlled by the contract.",
       "type": "object",
       "required": [
         "all_tokens"
@@ -281,6 +312,7 @@
       "additionalProperties": false
     },
     {
+      "description": "Return the minter",
       "type": "object",
       "required": [
         "minter"
@@ -292,6 +324,61 @@
         }
       },
       "additionalProperties": false
+    },
+    {
+      "description": "Extension query",
+      "type": "object",
+      "required": [
+        "extension"
+      ],
+      "properties": {
+        "extension": {
+          "type": "object",
+          "required": [
+            "msg"
+          ],
+          "properties": {
+            "msg": {
+              "$ref": "#/definitions/NameQueryMsg"
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    {
+      "description": "Query the contract's ownership information",
+      "type": "object",
+      "required": [
+        "ownership"
+      ],
+      "properties": {
+        "ownership": {
+          "type": "object",
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
     }
-  ]
+  ],
+  "definitions": {
+    "NameQueryMsg": {
+      "oneOf": [
+        {
+          "type": "object",
+          "required": [
+            "config"
+          ],
+          "properties": {
+            "config": {
+              "type": "object",
+              "additionalProperties": false
+            }
+          },
+          "additionalProperties": false
+        }
+      ]
+    }
+  }
 }
