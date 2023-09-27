@@ -14,7 +14,6 @@ use cw721_base::ExecuteMsg::{
 use cw721_base::QueryMsg::Extension as QExtension;
 
 use aurans_resolver::ExecuteMsg::{DeleteNames, UpdateRecord};
-use cw721_base::state::TokenInfo;
 use cw_utils::Expiration;
 
 use crate::error::ContractError;
@@ -140,33 +139,22 @@ fn execute_mint(
     token_uri: Option<String>,
     extension: Metadata,
 ) -> Result<Response, ContractError> {
-    cw_ownable::assert_owner(deps.storage, &info.sender)
-        .map_err(|_| ContractError::Unauthorized {})?;
-
-    let token = TokenInfo {
-        owner: deps.api.addr_validate(&owner)?,
-        approvals: vec![],
-        token_uri: token_uri,
-        extension: extension.clone(),
-    };
+    let config = CONFIG.load(deps.storage)?;
     let name_cw721 = NameCw721::default();
-    name_cw721
-        .tokens
-        .update(deps.storage, &token_id, |old| match old {
-            Some(_) => Err(ContractError::CW721Base(
-                cw721_base::ContractError::Claimed {},
-            )),
-            None => Ok(token.clone()),
-        })?;
-    name_cw721.increment_tokens(deps.storage)?;
+    name_cw721.mint(
+        deps,
+        info.clone(),
+        token_id.clone(),
+        owner.clone(),
+        token_uri,
+        extension.clone(),
+    )?;
 
-    let metadata = token.extension;
     let update_record = UpdateRecord {
         name: token_id.clone(),
-        list_bech32_prefix: metadata.bech32_prefix_registed,
+        list_bech32_prefix: extension.clone().bech32_prefix_registed,
         address: owner.clone(),
     };
-    let config = CONFIG.load(deps.storage)?;
     let update_resolver_msg = WasmMsg::Execute {
         contract_addr: config.resolver_contract.to_string(),
         msg: to_binary(&update_record)?,
@@ -186,7 +174,7 @@ fn execute_mint(
                 .into_iter()
                 .collect::<String>(),
         )
-        .add_attribute("ttl", extension.expires.to_string()))
+        .add_attribute("expires", extension.expires.to_string()))
 }
 
 fn execute_transfer_nft(
