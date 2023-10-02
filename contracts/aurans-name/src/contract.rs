@@ -292,6 +292,7 @@ fn execute_update_config(
         .add_attribute("resolver_contract", &resolver_contract))
 }
 
+// REQUIRED: sender must minter
 fn execute_extend_ttl(
     deps: DepsMut,
     _env: Env,
@@ -339,6 +340,7 @@ fn execute_extend_ttl(
         funds: vec![],
     };
 
+    // Update resolver
     let update_record = UpdateRecord {
         name: name.to_owned(),
         list_bech32_prefix: old_metadata.bech32_prefix_registed,
@@ -362,6 +364,7 @@ fn execute_extend_ttl(
 
 const DEFAULT_LIMIT_BACTH: usize = 10;
 
+// REQUIRED: sender must admin 
 fn execute_evict_batch(
     deps: DepsMut,
     _env: Env,
