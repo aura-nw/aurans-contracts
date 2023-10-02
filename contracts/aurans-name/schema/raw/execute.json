@@ -421,7 +421,7 @@
           ]
         },
         "expires": {
-          "$ref": "#/definitions/Expiration"
+          "$ref": "#/definitions/Timestamp"
         },
         "external_url": {
           "type": [
@@ -534,7 +534,7 @@
               ],
               "properties": {
                 "new_expires": {
-                  "$ref": "#/definitions/Expiration"
+                  "$ref": "#/definitions/Timestamp"
                 },
                 "token_id": {
                   "type": "string"

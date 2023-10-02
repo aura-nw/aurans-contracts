@@ -1,7 +1,10 @@
+use std::vec;
+
 #[cfg(not(feature = "library"))]
 use cosmwasm_std::entry_point;
 use cosmwasm_std::{
-    to_binary, Binary, Deps, DepsMut, Empty, Env, MessageInfo, Response, StdResult, WasmMsg,
+    to_binary, Binary, Deps, DepsMut, Empty, Env, MessageInfo, Response, StdResult, Timestamp,
+    WasmMsg,
 };
 use cw2::set_contract_version;
 use cw721::{ContractInfoResponse, Cw721ReceiveMsg};
@@ -14,12 +17,12 @@ use cw721_base::ExecuteMsg::{
 use cw721_base::QueryMsg::Extension as QExtension;
 
 use aurans_resolver::ExecuteMsg::{DeleteNames, UpdateRecord};
-use cw_utils::Expiration;
 
 use crate::error::ContractError;
 use crate::state::{Config, Metadata, CONFIG};
 
 use crate::msg::{ExecuteMsg, InstantiateMsg, MigrateMsg, NameExecuteMsg, NameQueryMsg, QueryMsg};
+use crate::util::extract_name_from_token_id;
 
 // version info for migration info
 const CONTRACT_NAME: &str = "crates.io:aurans-name";
@@ -150,8 +153,9 @@ fn execute_mint(
         extension.clone(),
     )?;
 
+    let name = extract_name_from_token_id(token_id.as_ref())?;
     let update_record = UpdateRecord {
-        name: token_id.clone(),
+        name: name.to_owned(),
         list_bech32_prefix: extension.clone().bech32_prefix_registed,
         address: owner.clone(),
     };
@@ -166,15 +170,7 @@ fn execute_mint(
         .add_attribute("action", "mint")
         .add_attribute("minter", info.sender)
         .add_attribute("owner", owner)
-        .add_attribute("token_id", token_id)
-        .add_attribute(
-            "bech32_prefix_registed",
-            extension
-                .bech32_prefix_registed
-                .into_iter()
-                .collect::<String>(),
-        )
-        .add_attribute("expires", extension.expires.to_string()))
+        .add_attribute("token_id", token_id))
 }
 
 fn execute_transfer_nft(
@@ -188,8 +184,9 @@ fn execute_transfer_nft(
     let name_cw721 = NameCw721::default();
     let token = name_cw721._transfer_nft(deps, &env, &info, &recipient, &token_id)?;
     let metadata = token.extension;
+    let name = extract_name_from_token_id(token_id.as_ref())?;
     let update_record = UpdateRecord {
-        name: token_id.clone(),
+        name: name.to_owned(),
         list_bech32_prefix: metadata.bech32_prefix_registed,
         address: recipient.clone(),
     };
@@ -224,8 +221,9 @@ fn execute_send_nft(
         msg,
     };
     let metadata = token.extension;
+    let name = extract_name_from_token_id(token_id.as_ref())?;
     let update_record = UpdateRecord {
-        name: token_id.clone(),
+        name: name.to_owned(),
         list_bech32_prefix: metadata.bech32_prefix_registed,
         address: contract.clone(),
     };
@@ -296,23 +294,70 @@ fn execute_update_config(
 
 fn execute_extend_ttl(
     deps: DepsMut,
-    env: Env,
+    _env: Env,
     info: MessageInfo,
     token_id: String,
-    expires: Expiration,
+    new_expires: Timestamp,
 ) -> Result<Response, ContractError> {
+    let config = CONFIG.load(deps.storage)?;
     let name_cw721 = NameCw721::default();
-    let mut token = name_cw721.tokens.load(deps.storage, &token_id)?;
-    name_cw721.check_can_send(deps.as_ref(), &env, &info, &token)?;
-    let old_metadata = token.extension.clone();
-    token.extension.bech32_prefix_registed = old_metadata.bech32_prefix_registed;
-    token.extension.expires = expires;
+    let mut old_token = name_cw721.tokens.load(deps.storage, &token_id)?;
 
-    name_cw721.tokens.save(deps.storage, &token_id, &token)?;
-    Ok(Response::new()
-        .add_attribute("action", "extend_ttl")
-        .add_attribute("token_id", &token_id)
-        .add_attribute("new_ttl", expires.to_string()))
+    let old_metadata = old_token.clone().extension;
+    old_token.extension.bech32_prefix_registed = old_metadata.bech32_prefix_registed.clone();
+
+    // Burn old token
+    name_cw721.tokens.remove(deps.storage, &token_id)?;
+    name_cw721.decrement_tokens(deps.storage)?;
+
+    let response = Response::new()
+        .add_attribute("action", "burn")
+        .add_attribute("sender", &info.sender)
+        .add_attribute("token_id", &token_id);
+
+    // Mint new token
+    let name = extract_name_from_token_id(token_id.as_ref())?;
+    let new_token_id = format!("{}@{}", name, new_expires.seconds());
+    name_cw721.mint(
+        deps,
+        info.clone(),
+        new_token_id.clone(),
+        old_token.owner.clone().to_string(),
+        old_token.token_uri,
+        old_metadata.clone(),
+    )?;
+
+    let name = extract_name_from_token_id(token_id.as_ref())?;
+
+    // Delete name from resolver
+    let delete_names = DeleteNames {
+        names: vec![name.to_owned()],
+    };
+    let delete_resolver_msg = WasmMsg::Execute {
+        contract_addr: config.resolver_contract.to_string(),
+        msg: to_binary(&delete_names)?,
+        funds: vec![],
+    };
+
+    let update_record = UpdateRecord {
+        name: name.to_owned(),
+        list_bech32_prefix: old_metadata.bech32_prefix_registed,
+        address: old_token.owner.to_string(),
+    };
+    let update_resolver_msg = WasmMsg::Execute {
+        contract_addr: config.resolver_contract.to_string(),
+        msg: to_binary(&update_record)?,
+        funds: vec![],
+    };
+
+    let response = response
+        .add_message(delete_resolver_msg)
+        .add_message(update_resolver_msg)
+        .add_attribute("action", "mint")
+        .add_attribute("minter", info.sender)
+        .add_attribute("owner", old_token.owner.to_string())
+        .add_attribute("token_id", token_id);
+    Ok(response)
 }
 
 const DEFAULT_LIMIT_BACTH: usize = 10;
@@ -337,9 +382,12 @@ fn execute_evict_batch(
         name_cw721.decrement_tokens(deps.storage)?;
     }
     // Delete records has burn to resolver
-    let delete_names = DeleteNames {
-        names: token_ids.clone(),
-    };
+    let mut names: Vec<String> = Vec::new();
+    for token_id in &token_ids {
+        let name = extract_name_from_token_id(token_id)?;
+        names.push(name.to_owned());
+    }
+    let delete_names = DeleteNames { names };
     let config = CONFIG.load(deps.storage)?;
     let delete_resolver_msg = WasmMsg::Execute {
         contract_addr: config.resolver_contract.to_string(),

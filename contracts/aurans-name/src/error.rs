@@ -21,4 +21,7 @@ pub enum ContractError {
 
     #[error("Batch too long")]
     BatchTooLong {},
+
+    #[error("Invalid token id")]
+    InvalidTokenId {},
 }

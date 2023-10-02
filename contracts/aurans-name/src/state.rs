@@ -1,7 +1,6 @@
 use cosmwasm_schema::cw_serde;
-use cosmwasm_std::Addr;
+use cosmwasm_std::{Addr, Timestamp};
 use cw_storage_plus::Item;
-use cw_utils::Expiration;
 
 #[cw_serde]
 pub struct Trait {
@@ -32,9 +31,9 @@ pub struct Metadata {
     /// question: how do we validate this?
     pub royalty_payment_address: Option<String>,
 
-    // Main name metadata
+    // List bech32 prefix register
     pub bech32_prefix_registed: Vec<String>,
-    pub expires: Expiration,
+    pub expires: Timestamp,
 }
 
 #[cw_serde]
