@@ -27,7 +27,7 @@ pub enum NameExecuteMsg {
     UpdateResolver {
         resolver: String,
     },
-    ExtendTTL {
+    ExtendExpires {
         token_id: String,
         new_expires: Timestamp,
     },

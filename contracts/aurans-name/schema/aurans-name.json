@@ -411,8 +411,7 @@
       "Metadata": {
         "type": "object",
         "required": [
-          "bech32_prefix_registed",
-          "expires"
+          "bech32_prefix_registed"
         ],
         "properties": {
           "animation_url": {
@@ -447,9 +446,6 @@
               "string",
               "null"
             ]
-          },
-          "expires": {
-            "$ref": "#/definitions/Timestamp"
           },
           "external_url": {
             "type": [
@@ -551,10 +547,10 @@
           {
             "type": "object",
             "required": [
-              "extend_t_t_l"
+              "extend_expires"
             ],
             "properties": {
-              "extend_t_t_l": {
+              "extend_expires": {
                 "type": "object",
                 "required": [
                   "new_expires",

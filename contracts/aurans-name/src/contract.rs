@@ -110,10 +110,10 @@ pub fn execute(
                 admin,
                 resolver_contract,
             } => execute_update_config(deps, env, info, admin, resolver_contract),
-            NameExecuteMsg::ExtendTTL {
+            NameExecuteMsg::ExtendExpires {
                 token_id,
                 new_expires,
-            } => execute_extend_ttl(deps, env, info, token_id, new_expires),
+            } => execute_extend_expires(deps, env, info, token_id, new_expires),
             NameExecuteMsg::EvictBatch { token_ids } => {
                 execute_evict_batch(deps, env, info, token_ids)
             }
@@ -153,7 +153,7 @@ fn execute_mint(
         extension.clone(),
     )?;
 
-    let name = extract_name_from_token_id(token_id.as_ref())?;
+    let (name, expires) = extract_name_from_token_id(token_id.as_ref())?;
     let update_record = UpdateRecord {
         name: name.to_owned(),
         list_bech32_prefix: extension.clone().bech32_prefix_registed,
@@ -170,7 +170,12 @@ fn execute_mint(
         .add_attribute("action", "mint")
         .add_attribute("minter", info.sender)
         .add_attribute("owner", owner)
-        .add_attribute("token_id", token_id))
+        .add_attribute("token_id", token_id)
+        .add_attribute("expires", expires.to_string())
+        .add_attribute(
+            "bech32_prefix_registed",
+            extension.bech32_prefix_registed.join("-"),
+        ))
 }
 
 fn execute_transfer_nft(
@@ -184,7 +189,7 @@ fn execute_transfer_nft(
     let name_cw721 = NameCw721::default();
     let token = name_cw721._transfer_nft(deps, &env, &info, &recipient, &token_id)?;
     let metadata = token.extension;
-    let name = extract_name_from_token_id(token_id.as_ref())?;
+    let (name, _) = extract_name_from_token_id(token_id.as_ref())?;
     let update_record = UpdateRecord {
         name: name.to_owned(),
         list_bech32_prefix: metadata.bech32_prefix_registed,
@@ -221,7 +226,7 @@ fn execute_send_nft(
         msg,
     };
     let metadata = token.extension;
-    let name = extract_name_from_token_id(token_id.as_ref())?;
+    let (name, _) = extract_name_from_token_id(token_id.as_ref())?;
     let update_record = UpdateRecord {
         name: name.to_owned(),
         list_bech32_prefix: metadata.bech32_prefix_registed,
@@ -292,8 +297,8 @@ fn execute_update_config(
         .add_attribute("resolver_contract", &resolver_contract))
 }
 
-// REQUIRED: sender must minter
-fn execute_extend_ttl(
+// REQUIRED: sender must be minter
+fn execute_extend_expires(
     deps: DepsMut,
     _env: Env,
     info: MessageInfo,
@@ -317,7 +322,7 @@ fn execute_extend_ttl(
         .add_attribute("token_id", &token_id);
 
     // Mint new token
-    let name = extract_name_from_token_id(token_id.as_ref())?;
+    let (name, _) = extract_name_from_token_id(token_id.as_ref())?;
     let new_token_id = format!("{}@{}", name, new_expires.seconds());
     name_cw721.mint(
         deps,
@@ -327,8 +332,6 @@ fn execute_extend_ttl(
         old_token.token_uri,
         old_metadata.clone(),
     )?;
-
-    let name = extract_name_from_token_id(token_id.as_ref())?;
 
     // Delete name from resolver
     let delete_names = DeleteNames {
@@ -364,7 +367,7 @@ fn execute_extend_ttl(
 
 const DEFAULT_LIMIT_BACTH: usize = 10;
 
-// REQUIRED: sender must admin 
+// REQUIRED: sender must be admin
 fn execute_evict_batch(
     deps: DepsMut,
     _env: Env,
@@ -387,7 +390,7 @@ fn execute_evict_batch(
     // Delete records has burn to resolver
     let mut names: Vec<String> = Vec::new();
     for token_id in &token_ids {
-        let name = extract_name_from_token_id(token_id)?;
+        let (name, _) = extract_name_from_token_id(token_id)?;
         names.push(name.to_owned());
     }
     let delete_names = DeleteNames { names };
