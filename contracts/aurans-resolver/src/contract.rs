@@ -7,7 +7,7 @@ use cw2::set_contract_version;
 use cw_storage_plus::Bound;
 
 use crate::error::ContractError;
-use crate::state::{records, Config, CONFIG};
+use crate::state::{records, Config, CONFIG, NAME_CONTRACT};
 
 use crate::msg::{
     AddressResponse, ExecuteMsg, InstantiateMsg, MigrateMsg, NamesResponse, QueryMsg,
@@ -33,14 +33,12 @@ pub fn instantiate(
     // save contract config
     let config = Config {
         admin: deps.api.addr_validate(&msg.admin)?,
-        name_contract: deps.api.addr_validate(&msg.name_contract)?,
     };
     CONFIG.save(deps.storage, &config)?;
 
     Ok(Response::new()
         .add_attribute("action", "instantiate")
-        .add_attribute("admin", info.sender.as_ref())
-        .add_attribute("name_contract", &msg.name_contract.to_owned()))
+        .add_attribute("admin", info.sender.as_ref()))
 }
 
 #[cfg_attr(not(feature = "library"), entry_point)]
@@ -62,19 +60,20 @@ pub fn execute(
 ) -> Result<Response, ContractError> {
     let _api = deps.api;
     match msg {
-        ExecuteMsg::UpdateConfig {
-            admin,
-            name_contract,
-        } => execute_update_config(deps, env, info, admin, name_contract),
+        ExecuteMsg::UpdateConfig { admin } => execute_update_config(deps, env, info, admin),
         ExecuteMsg::UpdateRecord {
             name,
-            bech32_prefix,
+            list_bech32_prefix,
             address,
-        } => execute_update_record(deps, env, info, name, bech32_prefix, address),
+        } => execute_update_record(deps, env, info, name, list_bech32_prefix, address),
         ExecuteMsg::DeleteRecord {
             name,
-            bech32_prefix,
-        } => execute_delete_record(deps, env, info, name, bech32_prefix),
+            list_bech32_prefix,
+        } => execute_delete_record(deps, env, info, name, list_bech32_prefix),
+        ExecuteMsg::UpdateNameContract { name_contract } => {
+            execute_update_name_contract(deps, env, info, name_contract)
+        }
+        ExecuteMsg::DeleteNames { names } => execute_delete_names(deps, env, info, names),
     }
 }
 
@@ -82,6 +81,7 @@ pub fn execute(
 pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<Binary> {
     match msg {
         QueryMsg::Config {} => to_binary(&query_config(deps)?),
+        QueryMsg::NameContract {} => to_binary(&query_name_contract(deps)?),
         QueryMsg::AddressOf {
             primary_name,
             bech32_prefix,
@@ -109,7 +109,6 @@ fn execute_update_config(
     _env: Env,
     info: MessageInfo,
     admin: String,
-    name_contract: String,
 ) -> Result<Response, ContractError> {
     // only contract admin can update config
     let config = CONFIG.load(deps.storage)?;
@@ -120,11 +119,28 @@ fn execute_update_config(
     // update config
     let new_config = Config {
         admin: deps.api.addr_validate(&admin)?,
-        name_contract: deps.api.addr_validate(&name_contract)?,
     };
     CONFIG.save(deps.storage, &new_config)?;
 
     Ok(Response::new().add_attributes([("action", "update_config"), ("admin", &admin)]))
+}
+
+fn execute_update_name_contract(
+    deps: DepsMut,
+    _env: Env,
+    info: MessageInfo,
+    name_contract: String,
+) -> Result<Response, ContractError> {
+    // only contract admin can update name contract
+    let config = CONFIG.load(deps.storage)?;
+    if config.admin != info.sender {
+        return Err(ContractError::Unauthorized {});
+    }
+    let name_contract = deps.api.addr_validate(&name_contract)?;
+    NAME_CONTRACT.save(deps.storage, &name_contract)?;
+    Ok(Response::new()
+        .add_attribute("action", "update_name_contract")
+        .add_attribute("name_contract", name_contract))
 }
 
 fn execute_update_record(
@@ -132,18 +148,22 @@ fn execute_update_record(
     _env: Env,
     info: MessageInfo,
     name: String,
-    bech32_prefix: String,
+    list_bech32_prefix: Vec<String>,
     address: String,
 ) -> Result<Response, ContractError> {
     let config = CONFIG.load(deps.storage)?;
-    if !can_execute(&config, &info.sender) {
-        return Err(ContractError::Unauthorized {});
+    can_execute(deps.as_ref(), &config, &info.sender)?;
+
+    for bech32_prefix in &list_bech32_prefix {
+        records().save(deps.storage, (&name, &bech32_prefix), &address)?;
     }
-    records().save(deps.storage, (&name, &bech32_prefix), &address)?;
     Ok(Response::new()
         .add_attribute("action", "update_record")
         .add_attribute("name", &name)
-        .add_attribute("bech32_prefix", &bech32_prefix)
+        .add_attribute(
+            "list_bech32_prefix",
+            &list_bech32_prefix.into_iter().collect::<String>(),
+        )
         .add_attribute("address", &address))
 }
 
@@ -152,21 +172,47 @@ fn execute_delete_record(
     _env: Env,
     info: MessageInfo,
     name: String,
-    bech32_prefix: String,
+    list_bech32_prefix: Vec<String>,
 ) -> Result<Response, ContractError> {
     let config = CONFIG.load(deps.storage)?;
-    if !can_execute(&config, &info.sender) {
-        return Err(ContractError::Unauthorized {});
+    can_execute(deps.as_ref(), &config, &info.sender)?;
+
+    for bech32_prefix in &list_bech32_prefix {
+        records().remove(deps.storage, (&name, &bech32_prefix))?;
     }
-    records().remove(deps.storage, (&name, &bech32_prefix))?;
     Ok(Response::new()
         .add_attribute("action", "delete_record")
         .add_attribute("name", &name)
-        .add_attribute("bech32_prefix", &bech32_prefix))
+        .add_attribute(
+            "list_bech32_prefix",
+            &list_bech32_prefix.into_iter().collect::<String>(),
+        ))
+}
+
+fn execute_delete_names(
+    deps: DepsMut,
+    _env: Env,
+    info: MessageInfo,
+    names: Vec<String>,
+) -> Result<Response, ContractError> {
+    let config = CONFIG.load(deps.storage)?;
+    can_execute(deps.as_ref(), &config, &info.sender)?;
+
+    for name in &names {
+        records().prefix(name).clear(deps.storage, None);
+    }
+
+    Ok(Response::new()
+        .add_attribute("action", "delete_batch_record")
+        .add_attribute("names", names.into_iter().collect::<String>()))
 }
 
 fn query_config(deps: Deps) -> StdResult<Config> {
     CONFIG.load(deps.storage)
+}
+
+fn query_name_contract(deps: Deps) -> StdResult<Addr> {
+    NAME_CONTRACT.load(deps.storage)
 }
 
 fn query_address_of(
@@ -229,12 +275,14 @@ fn query_names(
 }
 
 // Return true if sender is admin or address of name contract
-fn can_execute(config: &Config, sender: &Addr) -> bool {
+fn can_execute(deps: Deps, config: &Config, sender: &Addr) -> Result<bool, ContractError> {
     if sender.to_string() == config.admin {
-        true
-    } else if sender.to_string() == config.name_contract {
-        true
-    } else {
-        false
+        return Ok(true);
     }
+    let name_contract = NAME_CONTRACT.load(deps.storage)?;
+    if sender.to_string() == name_contract {
+        return Ok(true);
+    }
+
+    Err(ContractError::Unauthorized {})
 }

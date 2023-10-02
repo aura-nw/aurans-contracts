@@ -105,26 +105,6 @@ pub mod env {
             contract_code_id: manager_contract_code_id,
         });
 
-        // instantiate aurans name contract
-        let name_contract_addr = app
-            .instantiate_contract(
-                name_contract_code_id,
-                Addr::unchecked(ADMIN),
-                &NameInstantiateMsg {
-                    admin: ADMIN.to_string(),
-                },
-                &[],
-                "test instantiate contract",
-                None,
-            )
-            .unwrap();
-
-        // add contract info to the vector
-        contract_info_vec.push(ContractInfo {
-            contract_addr: name_contract_addr.to_string(),
-            contract_code_id: name_contract_code_id,
-        });
-
         // instantiate aurans resolver contract
         let resolver_contract_addr = app
             .instantiate_contract(
@@ -132,7 +112,6 @@ pub mod env {
                 Addr::unchecked(ADMIN),
                 &ResolverInstantiateMsg {
                     admin: ADMIN.to_string(),
-                    name_contract: name_contract_addr.to_string(),
                 },
                 &[],
                 "test instantiate contract",
@@ -144,6 +123,28 @@ pub mod env {
         contract_info_vec.push(ContractInfo {
             contract_addr: resolver_contract_addr.to_string(),
             contract_code_id: resolver_contract_code_id,
+        });
+
+        // instantiate aurans name contract
+        let name_contract_addr = app
+            .instantiate_contract(
+                name_contract_code_id,
+                Addr::unchecked(ADMIN),
+                &NameInstantiateMsg {
+                    admin: ADMIN.to_string(),
+                    resolver_contract: resolver_contract_addr.to_string(),
+                    minter: manager_contract_addr.to_string(),
+                },
+                &[],
+                "test instantiate contract",
+                None,
+            )
+            .unwrap();
+
+        // add contract info to the vector
+        contract_info_vec.push(ContractInfo {
+            contract_addr: name_contract_addr.to_string(),
+            contract_code_id: name_contract_code_id,
         });
 
         (app, contract_info_vec)

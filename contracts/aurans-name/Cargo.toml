@@ -1,17 +1,14 @@
 [package]
-name          = "aurans-name"
-authors       = { workspace = true }
-version       = { workspace = true }
-edition       = { workspace = true }
-license       = { workspace = true }
-repository    = { workspace = true }
-rust-version  = { workspace = true }
+name = "aurans-name"
+authors = { workspace = true }
+version = { workspace = true }
+edition = { workspace = true }
+license = { workspace = true }
+repository = { workspace = true }
+rust-version = { workspace = true }
 
 
-exclude = [
-  "contract.wasm",
-  "hash.txt",
-]
+exclude = ["contract.wasm", "hash.txt"]
 
 
 [lib]
@@ -24,19 +21,22 @@ backtraces = ["cosmwasm-std/backtraces"]
 library = []
 
 [dependencies]
-cw-utils          = { workspace = true }
-cw-storage-plus   = { workspace = true }
-cw2               = { workspace = true }
-cw721             = { workspace = true }
-cw721-base        = { workspace = true }
-cosmwasm-schema   = { workspace = true }
-cosmwasm-std      = { workspace = true }
-cosmwasm-storage  = { workspace = true }
-schemars          = { workspace = true }
-serde             = { workspace = true }
-thiserror         = { workspace = true }
+cw-utils = { workspace = true }
+cw-storage-plus = { workspace = true }
+cw2 = { workspace = true }
+cw721 = { workspace = true }
+cw721-base = { workspace = true }
+cosmwasm-schema = { workspace = true }
+cosmwasm-std = { workspace = true }
+cosmwasm-storage = { workspace = true }
+schemars = { workspace = true }
+serde = { workspace = true }
+thiserror = { workspace = true }
+aurans-resolver = { workspace = true }
+cw-ownable = { workspace = true }
+
 
 [dev-dependencies]
-cw-multi-test     = { workspace = true }
-cosmwasm-schema   = { workspace = true }
-cosmwasm-storage  = { workspace = true }
+cw-multi-test = { workspace = true }
+cosmwasm-schema = { workspace = true }
+cosmwasm-storage = { workspace = true }

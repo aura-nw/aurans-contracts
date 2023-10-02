@@ -1,13 +1,16 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "title": "InstantiateMsg",
-  "description": "Message type for `instantiate` entry_point",
+  "title": "ContractInfoResponse",
   "type": "object",
   "required": [
-    "admin"
+    "name",
+    "symbol"
   ],
   "properties": {
-    "admin": {
+    "name": {
+      "type": "string"
+    },
+    "symbol": {
       "type": "string"
     }
   },

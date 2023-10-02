@@ -4,10 +4,19 @@
   "description": "Message type for `instantiate` entry_point",
   "type": "object",
   "required": [
-    "admin"
+    "admin",
+    "minter",
+    "resolver_contract"
   ],
   "properties": {
     "admin": {
+      "type": "string"
+    },
+    "minter": {
+      "description": "The minter is the only one who can create new NFTs. This is designed for a base NFT that is controlled by an external program or contract. You will likely replace this with custom logic in custom NFTs",
+      "type": "string"
+    },
+    "resolver_contract": {
       "type": "string"
     }
   },

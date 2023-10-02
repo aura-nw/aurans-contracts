@@ -5,8 +5,6 @@ use cw_storage_plus::{Index, IndexList, IndexedMap, Item, MultiIndex};
 #[cw_serde]
 pub struct Config {
     pub admin: Addr,
-    // Address of name contract
-    pub name_contract: Addr,
 }
 
 pub struct RecordIndexes<'a> {
@@ -33,4 +31,5 @@ pub fn records<'a>() -> IndexedMap<'a, (&'a str, &'a str), String, RecordIndexes
     IndexedMap::new("records", indexes)
 }
 
+pub const NAME_CONTRACT: Item<Addr> = Item::new("name_contract");
 pub const CONFIG: Item<Config> = Item::new("config");

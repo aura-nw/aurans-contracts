@@ -12,13 +12,30 @@
         "update_config": {
           "type": "object",
           "required": [
-            "admin",
-            "name_contract"
+            "admin"
           ],
           "properties": {
             "admin": {
               "type": "string"
-            },
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "required": [
+        "update_name_contract"
+      ],
+      "properties": {
+        "update_name_contract": {
+          "type": "object",
+          "required": [
+            "name_contract"
+          ],
+          "properties": {
             "name_contract": {
               "type": "string"
             }
@@ -38,15 +55,18 @@
           "type": "object",
           "required": [
             "address",
-            "bech32_prefix",
+            "list_bech32_prefix",
             "name"
           ],
           "properties": {
             "address": {
               "type": "string"
             },
-            "bech32_prefix": {
-              "type": "string"
+            "list_bech32_prefix": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
             },
             "name": {
               "type": "string"
@@ -66,15 +86,42 @@
         "delete_record": {
           "type": "object",
           "required": [
-            "bech32_prefix",
+            "list_bech32_prefix",
             "name"
           ],
           "properties": {
-            "bech32_prefix": {
-              "type": "string"
+            "list_bech32_prefix": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
             },
             "name": {
               "type": "string"
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "required": [
+        "delete_names"
+      ],
+      "properties": {
+        "delete_names": {
+          "type": "object",
+          "required": [
+            "names"
+          ],
+          "properties": {
+            "names": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
             }
           },
           "additionalProperties": false
