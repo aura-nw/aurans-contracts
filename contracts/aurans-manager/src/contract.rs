@@ -1,10 +1,16 @@
+use aurans_name::msg::InstantiateMsg as NameInstantiateMsg;
+use aurans_resolver::state::NAME_CONTRACT;
 #[cfg(not(feature = "library"))]
 use cosmwasm_std::entry_point;
-use cosmwasm_std::{to_binary, Binary, Deps, DepsMut, Env, MessageInfo, Response, StdResult};
+use cosmwasm_std::{
+    to_binary, Binary, CosmosMsg, Deps, DepsMut, Env, MessageInfo, Reply, ReplyOn, Response,
+    StdResult, SubMsg, WasmMsg,
+};
 use cw2::set_contract_version;
+use cw_utils::parse_reply_instantiate_data;
 
 use crate::error::ContractError;
-use crate::state::{Config, CONFIG};
+use crate::state::{Config, PriceInfo, Verifier, CONFIG, PRICE_INFO, VERIFIER};
 
 // version info for migration info
 const CONTRACT_NAME: &str = "crates.io:aurans-manager";
@@ -16,8 +22,8 @@ use crate::msg::{ExecuteMsg, InstantiateMsg, MigrateMsg, QueryMsg};
 #[cfg_attr(not(feature = "library"), entry_point)]
 pub fn instantiate(
     deps: DepsMut,
-    _env: Env,
-    info: MessageInfo,
+    env: Env,
+    _info: MessageInfo,
     msg: InstantiateMsg,
 ) -> Result<Response, ContractError> {
     set_contract_version(deps.storage, CONTRACT_NAME, CONTRACT_VERSION)?;
@@ -25,13 +31,47 @@ pub fn instantiate(
     // save contract config
     let config = Config {
         admin: deps.api.addr_validate(&msg.admin)?,
+        name_code_id: msg.name_code_id.clone(),
+        resolver_code_id: msg.resolver_code_id.clone(),
     };
     CONFIG.save(deps.storage, &config)?;
 
-    Ok(
-        Response::new()
-            .add_attributes([("action", "instantiate"), ("admin", info.sender.as_ref())]),
-    )
+    let price_info = PriceInfo {
+        base_price: msg.base_price.clone(),
+    };
+    PRICE_INFO.save(deps.storage, &price_info)?;
+
+    let verifier = Verifier {
+        backend_pubkey: msg.backend_pubkey.clone(),
+    };
+    VERIFIER.save(deps.storage, &verifier)?;
+
+    let name_ins_msg = CosmosMsg::Wasm(WasmMsg::Instantiate {
+        admin: Some(env.contract.address.to_string()),
+        code_id: config.name_code_id,
+        msg: to_binary(&NameInstantiateMsg {
+            admin: config.admin.to_string(),
+            minter: env.contract.address.to_string(),
+            resolver_code_id: config.resolver_code_id,
+        })?,
+        funds: vec![],
+        label: "name".to_owned(),
+    });
+
+    let name_sub_msg = SubMsg {
+        id: 1,
+        msg: name_ins_msg,
+        gas_limit: None,
+        reply_on: ReplyOn::Success,
+    };
+
+    Ok(Response::new()
+        .add_submessage(name_sub_msg)
+        .add_attribute("action", "instantiate")
+        .add_attribute("base_price", msg.base_price.to_string())
+        .add_attribute("backend_pubkey", msg.backend_pubkey.to_string())
+        .add_attribute("name_code_id", msg.name_code_id.to_string())
+        .add_attribute("resolver_code_id", msg.resolver_code_id.to_string()))
 }
 
 #[cfg_attr(not(feature = "library"), entry_point)]
@@ -53,7 +93,11 @@ pub fn execute(
 ) -> Result<Response, ContractError> {
     let _api = deps.api;
     match msg {
-        ExecuteMsg::UpdateConfig { admin } => execute_update_config(deps, env, info, admin),
+        ExecuteMsg::UpdateConfig {
+            admin,
+            name_code_id,
+            resolver_code_id,
+        } => execute_update_config(deps, env, info, admin, name_code_id, resolver_code_id),
     }
 }
 
@@ -62,6 +106,8 @@ pub fn execute_update_config(
     _env: Env,
     info: MessageInfo,
     admin: String,
+    name_code_id: u64,
+    resolver_code_id: u64,
 ) -> Result<Response, ContractError> {
     // only contract admin can update config
     let config = CONFIG.load(deps.storage)?;
@@ -72,10 +118,16 @@ pub fn execute_update_config(
     // update config
     let new_config = Config {
         admin: deps.api.addr_validate(&admin)?,
+        name_code_id,
+        resolver_code_id,
     };
     CONFIG.save(deps.storage, &new_config)?;
 
-    Ok(Response::new().add_attributes([("action", "update_config"), ("admin", &admin)]))
+    Ok(Response::new()
+        .add_attribute("action", "update_config")
+        .add_attribute("admin", admin.to_string())
+        .add_attribute("name_code_id", name_code_id.to_string())
+        .add_attribute("resolver_code_id", resolver_code_id.to_string()))
 }
 
 #[cfg_attr(not(feature = "library"), entry_point)]
@@ -87,4 +139,14 @@ pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<Binary> {
 
 fn query_config(deps: Deps) -> StdResult<Config> {
     CONFIG.load(deps.storage)
+}
+
+#[cfg_attr(not(feature = "library"), entry_point)]
+pub fn reply(deps: DepsMut, _env: Env, msg: Reply) -> StdResult<Response> {
+    let reply = parse_reply_instantiate_data(msg).unwrap();
+
+    let name_contract = deps.api.addr_validate(&reply.contract_address)?;
+    NAME_CONTRACT.save(deps.storage, &name_contract)?;
+
+    Ok(Response::new().add_attribute("name_contract", name_contract))
 }

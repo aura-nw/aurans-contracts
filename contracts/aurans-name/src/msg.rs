@@ -7,7 +7,7 @@ use crate::state::{Config, Metadata};
 #[cw_serde]
 pub struct InstantiateMsg {
     pub admin: String,
-    pub resolver_contract: String,
+    pub resolver_code_id: u64,
 
     /// The minter is the only one who can create new NFTs.
     /// This is designed for a base NFT that is controlled by an external program
@@ -22,7 +22,6 @@ pub type ExecuteMsg = cw721_base::ExecuteMsg<Metadata, NameExecuteMsg>;
 pub enum NameExecuteMsg {
     UpdateConfig {
         admin: String,
-        resolver_contract: String,
     },
     UpdateResolver {
         resolver: String,

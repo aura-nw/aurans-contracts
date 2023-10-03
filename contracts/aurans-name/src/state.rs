@@ -38,7 +38,12 @@ pub struct Metadata {
 #[cw_serde]
 pub struct Config {
     pub admin: Addr,
-    pub resolver_contract: Addr,
+}
+
+#[cw_serde]
+pub struct Resolver {
+    pub address: Addr,
 }
 
 pub const CONFIG: Item<Config> = Item::new("config");
+pub const RESOLVER: Item<Resolver> = Item::new("resolver");

@@ -7,7 +7,9 @@ pub fn extract_name_from_token_id(token_id: &str) -> Result<(&str, u64), Contrac
     if parts.len() != 2 {
         Err(ContractError::InvalidTokenId {})
     } else {
-        let expires = parts[1].parse::<u64>().map_err(|_| ContractError::InvalidTokenId {  })?;
+        let expires = parts[1]
+            .parse::<u64>()
+            .map_err(|_| ContractError::InvalidTokenId {})?;
         Ok((parts[0], expires))
     }
 }

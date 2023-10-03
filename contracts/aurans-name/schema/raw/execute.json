@@ -479,14 +479,10 @@
             "update_config": {
               "type": "object",
               "required": [
-                "admin",
-                "resolver_contract"
+                "admin"
               ],
               "properties": {
                 "admin": {
-                  "type": "string"
-                },
-                "resolver_contract": {
                   "type": "string"
                 }
               },
