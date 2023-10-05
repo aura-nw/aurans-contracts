@@ -7,7 +7,7 @@ use crate::state::Config;
 #[cw_serde]
 pub struct InstantiateMsg {
     pub admin: String,
-    pub base_price: Coin,
+    pub prices: Vec<(String, Coin)>,
     pub backend_pubkey: Binary,
     pub name_code_id: u64,
     pub resolver_code_id: u64,

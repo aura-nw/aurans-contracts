@@ -3,11 +3,23 @@
   "title": "Config",
   "type": "object",
   "required": [
-    "admin"
+    "admin",
+    "name_code_id",
+    "resolver_code_id"
   ],
   "properties": {
     "admin": {
       "$ref": "#/definitions/Addr"
+    },
+    "name_code_id": {
+      "type": "integer",
+      "format": "uint64",
+      "minimum": 0.0
+    },
+    "resolver_code_id": {
+      "type": "integer",
+      "format": "uint64",
+      "minimum": 0.0
     }
   },
   "additionalProperties": false,

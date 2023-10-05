@@ -2,7 +2,7 @@ use crate::error::ContractError;
 use cosmwasm_std::Deps;
 use sha2::Digest;
 
-pub fn check_verify_signature(
+pub fn verify_signature(
     deps: Deps,
     msg: &str,
     signature: &[u8],

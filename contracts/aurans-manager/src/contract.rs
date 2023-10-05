@@ -10,7 +10,7 @@ use cw2::set_contract_version;
 use cw_utils::parse_reply_instantiate_data;
 
 use crate::error::ContractError;
-use crate::state::{Config, PriceInfo, Verifier, CONFIG, PRICE_INFO, VERIFIER};
+use crate::state::{Config, NameLen, Verifier, CONFIG, PRICE_INFO, VERIFIER};
 
 // version info for migration info
 const CONTRACT_NAME: &str = "crates.io:aurans-manager";
@@ -36,10 +36,13 @@ pub fn instantiate(
     };
     CONFIG.save(deps.storage, &config)?;
 
-    let price_info = PriceInfo {
-        base_price: msg.base_price.clone(),
-    };
-    PRICE_INFO.save(deps.storage, &price_info)?;
+    for (ty, price) in &msg.prices {
+        if let Some(name_len) = NameLen::from_str(&ty) {
+            PRICE_INFO.save(deps.storage, &name_len.to_string(), &price)?;
+        } else {
+            return Err(ContractError::InvalidArguments);
+        }
+    }
 
     let verifier = Verifier {
         backend_pubkey: msg.backend_pubkey.clone(),
@@ -68,7 +71,6 @@ pub fn instantiate(
     Ok(Response::new()
         .add_submessage(name_sub_msg)
         .add_attribute("action", "instantiate")
-        .add_attribute("base_price", msg.base_price.to_string())
         .add_attribute("backend_pubkey", msg.backend_pubkey.to_string())
         .add_attribute("name_code_id", msg.name_code_id.to_string())
         .add_attribute("resolver_code_id", msg.resolver_code_id.to_string()))

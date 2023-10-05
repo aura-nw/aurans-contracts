@@ -28,6 +28,8 @@ pub mod env {
     pub const NATIVE_DENOM_2: &str = "utaura";
     pub const NATIVE_BALANCE_2: u128 = 1_000_000_000_000u128;
 
+    pub const BASE_PRICE: u128 = 100_000u128;
+
     pub struct ContractInfo {
         pub contract_addr: String,
         pub contract_code_id: u64,
@@ -94,10 +96,43 @@ pub mod env {
                 Addr::unchecked(ADMIN),
                 &ManagerInstantiateMsg {
                     admin: ADMIN.to_string(),
-                    base_price: Coin {
-                        denom: "uaura".to_owned(),
-                        amount: Uint128::from(100u64),
-                    },
+                    prices: vec![
+                        (
+                            "one".to_owned(),
+                            Coin {
+                                denom: NATIVE_DENOM.to_string(),
+                                amount: Uint128::from(BASE_PRICE * 100),
+                            },
+                        ),
+                        (
+                            "two".to_owned(),
+                            Coin {
+                                denom: NATIVE_DENOM.to_string(),
+                                amount: Uint128::from(BASE_PRICE * 50),
+                            },
+                        ),
+                        (
+                            "three".to_owned(),
+                            Coin {
+                                denom: NATIVE_DENOM.to_string(),
+                                amount: Uint128::from(BASE_PRICE * 20),
+                            },
+                        ),
+                        (
+                            "four".to_owned(),
+                            Coin {
+                                denom: NATIVE_DENOM.to_string(),
+                                amount: Uint128::from(BASE_PRICE * 10),
+                            },
+                        ),
+                        (
+                            "other".to_owned(),
+                            Coin {
+                                denom: NATIVE_DENOM.to_string(),
+                                amount: Uint128::from(BASE_PRICE),
+                            },
+                        ),
+                    ],
                     backend_pubkey: Binary::from(b"test"),
                     name_code_id: name_contract_code_id,
                     resolver_code_id: resolver_contract_code_id,
