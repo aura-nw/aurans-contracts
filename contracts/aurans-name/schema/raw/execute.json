@@ -383,7 +383,7 @@
     "Metadata": {
       "type": "object",
       "required": [
-        "bech32_prefix_registed"
+        "bech32_prefixes"
       ],
       "properties": {
         "animation_url": {
@@ -407,7 +407,7 @@
             "null"
           ]
         },
-        "bech32_prefix_registed": {
+        "bech32_prefixes": {
           "type": "array",
           "items": {
             "type": "string"
