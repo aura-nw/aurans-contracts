@@ -30,7 +30,7 @@ const CONTRACT_NAME: &str = "crates.io:aurans-name";
 const CONTRACT_VERSION: &str = env!("CARGO_PKG_VERSION");
 
 const AURANS_NAME: &str = "aurans-name";
-const AURANS_SYMBOL: &str = "aurans";
+const AURANS_SYMBOL: &str = "ans";
 
 /// This contract extends the Cw721 contract from CosmWasm to create non-fungible tokens (NFTs)
 /// that represent unique names. Each name is represented as a unique NFT.
@@ -171,7 +171,7 @@ fn execute_mint(
     let (name, expires) = extract_name_from_token_id(token_id.as_ref())?;
     let update_record = UpdateRecord {
         name: name.to_owned(),
-        list_bech32_prefix: extension.clone().bech32_prefix_registed,
+        list_bech32_prefix: extension.clone().bech32_prefixes,
         address: owner.clone(),
     };
     let update_resolver_msg = WasmMsg::Execute {
@@ -188,8 +188,8 @@ fn execute_mint(
         .add_attribute("token_id", token_id)
         .add_attribute("expires", expires.to_string())
         .add_attribute(
-            "bech32_prefix_registed",
-            extension.bech32_prefix_registed.join("-"),
+            "bech32_prefixes",
+            extension.bech32_prefixes.join("-"),
         ))
 }
 
@@ -207,7 +207,7 @@ fn execute_transfer_nft(
     let (name, _) = extract_name_from_token_id(token_id.as_ref())?;
     let update_record = UpdateRecord {
         name: name.to_owned(),
-        list_bech32_prefix: metadata.bech32_prefix_registed,
+        list_bech32_prefix: metadata.bech32_prefixes,
         address: recipient.clone(),
     };
     let update_resolver_msg = WasmMsg::Execute {
@@ -244,7 +244,7 @@ fn execute_send_nft(
     let (name, _) = extract_name_from_token_id(token_id.as_ref())?;
     let update_record = UpdateRecord {
         name: name.to_owned(),
-        list_bech32_prefix: metadata.bech32_prefix_registed,
+        list_bech32_prefix: metadata.bech32_prefixes,
         address: contract.clone(),
     };
     let update_resolver_msg = WasmMsg::Execute {
@@ -319,7 +319,7 @@ fn execute_extend_expires(
     let mut old_token = name_cw721.tokens.load(deps.storage, &token_id)?;
 
     let old_metadata = old_token.clone().extension;
-    old_token.extension.bech32_prefix_registed = old_metadata.bech32_prefix_registed.clone();
+    old_token.extension.bech32_prefixes = old_metadata.bech32_prefixes.clone();
 
     // Burn old token
     name_cw721.tokens.remove(deps.storage, &token_id)?;
@@ -357,7 +357,7 @@ fn execute_extend_expires(
     // Update resolver
     let update_record = UpdateRecord {
         name: name.to_owned(),
-        list_bech32_prefix: old_metadata.bech32_prefix_registed,
+        list_bech32_prefix: old_metadata.bech32_prefixes,
         address: old_token.owner.to_string(),
     };
     let update_resolver_msg = WasmMsg::Execute {
@@ -372,6 +372,7 @@ fn execute_extend_expires(
         .add_attribute("action", "mint")
         .add_attribute("minter", info.sender)
         .add_attribute("owner", old_token.owner.to_string())
+        .add_attribute("new_token_id", new_token_id)
         .add_attribute("token_id", token_id);
     Ok(response)
 }

@@ -25,6 +25,7 @@ dependencies = [
  "cw721-base 0.18.0",
  "schemars",
  "serde",
+ "serde_json",
  "sha2 0.10.8",
  "thiserror",
 ]
@@ -833,9 +834,9 @@ dependencies = [
 
 [[package]]
 name = "serde_json"
-version = "1.0.89"
+version = "1.0.107"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "020ff22c755c2ed3f8cf162dbb41a7268d934702f3ed3631656ea597e08fc3db"
+checksum = "6b420ce6e3d8bd882e9b243c6eed35dbc9a6110c9769e74b584e0d68d1f20c65"
 dependencies = [
  "itoa",
  "ryu",

@@ -1,5 +1,6 @@
+use aurans_name::state::Metadata;
 use cosmwasm_schema::{cw_serde, QueryResponses};
-use cosmwasm_std::{Binary, Coin};
+use cosmwasm_std::{Binary, Coin, Timestamp};
 
 use crate::state::Config;
 
@@ -7,7 +8,7 @@ use crate::state::Config;
 #[cw_serde]
 pub struct InstantiateMsg {
     pub admin: String,
-    pub prices: Vec<(String, Coin)>,
+    pub prices: Vec<(u8, Coin)>,
     pub backend_pubkey: Binary,
     pub name_code_id: u64,
     pub resolver_code_id: u64,
@@ -21,6 +22,23 @@ pub enum ExecuteMsg {
         name_code_id: u64,
         resolver_code_id: u64,
     },
+    UpdatePrices {
+        prices: Vec<(u8, Coin)>,
+    },
+    UpdateVerifier {
+        backend_pubkey: Binary,
+    },
+    Register {
+        name: String,
+        bech32_prefixes: Vec<String>,
+        backend_signature: Binary,
+        metadata: Metadata,
+    },
+    ExtendExpires {
+        name: String,
+        old_expires: Timestamp,
+        new_expires: Timestamp,
+    }
 }
 
 /// Message type for `migrate` entry_point

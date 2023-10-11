@@ -1,16 +1,21 @@
-use aurans_name::msg::InstantiateMsg as NameInstantiateMsg;
-use aurans_resolver::state::NAME_CONTRACT;
+use aurans_name::state::Metadata;
 #[cfg(not(feature = "library"))]
 use cosmwasm_std::entry_point;
 use cosmwasm_std::{
-    to_binary, Binary, CosmosMsg, Deps, DepsMut, Env, MessageInfo, Reply, ReplyOn, Response,
-    StdResult, SubMsg, WasmMsg,
+    to_binary, Binary, Coin, CosmosMsg, Deps, DepsMut, Env, MessageInfo, Reply, ReplyOn, Response,
+    StdResult, SubMsg, Timestamp, WasmMsg,
 };
 use cw2::set_contract_version;
 use cw_utils::parse_reply_instantiate_data;
 
 use crate::error::ContractError;
-use crate::state::{Config, NameLen, Verifier, CONFIG, PRICE_INFO, VERIFIER};
+use crate::price::{calc_price, check_fee};
+use crate::state::{Config, Verifier, CONFIG, NAME_CONTRACT, PRICE_INFO, VERIFIER};
+use crate::verify::verify_signature;
+
+use serde_json::json;
+
+use aurans_name::msg::InstantiateMsg as NameInstantiateMsg;
 
 // version info for migration info
 const CONTRACT_NAME: &str = "crates.io:aurans-manager";
@@ -36,12 +41,8 @@ pub fn instantiate(
     };
     CONFIG.save(deps.storage, &config)?;
 
-    for (ty, price) in &msg.prices {
-        if let Some(name_len) = NameLen::from_str(&ty) {
-            PRICE_INFO.save(deps.storage, &name_len.to_string(), &price)?;
-        } else {
-            return Err(ContractError::InvalidArguments);
-        }
+    for (l, price) in &msg.prices {
+        PRICE_INFO.save(deps.storage, *l, &price)?;
     }
 
     let verifier = Verifier {
@@ -73,7 +74,15 @@ pub fn instantiate(
         .add_attribute("action", "instantiate")
         .add_attribute("backend_pubkey", msg.backend_pubkey.to_string())
         .add_attribute("name_code_id", msg.name_code_id.to_string())
-        .add_attribute("resolver_code_id", msg.resolver_code_id.to_string()))
+        .add_attribute("resolver_code_id", msg.resolver_code_id.to_string())
+        .add_attribute(
+            "prices",
+            msg.prices
+                .iter()
+                .map(|(l, price)| format!("{}:{}", l, price.to_string()))
+                .collect::<Vec<String>>()
+                .join("-"),
+        ))
 }
 
 #[cfg_attr(not(feature = "library"), entry_point)]
@@ -100,10 +109,189 @@ pub fn execute(
             name_code_id,
             resolver_code_id,
         } => execute_update_config(deps, env, info, admin, name_code_id, resolver_code_id),
+        ExecuteMsg::UpdatePrices { prices } => execute_update_prices(deps, env, info, prices),
+        ExecuteMsg::UpdateVerifier { backend_pubkey } => {
+            execute_update_verifier(deps, env, info, backend_pubkey)
+        }
+        ExecuteMsg::Register {
+            name,
+            bech32_prefixes,
+            backend_signature,
+            metadata,
+        } => execute_register(
+            deps,
+            env,
+            info,
+            name,
+            bech32_prefixes,
+            backend_signature,
+            metadata,
+        ),
+        ExecuteMsg::ExtendExpires {
+            name,
+            old_expires,
+            new_expires,
+        } => execute_extend_expires(deps, env, info, name, old_expires, new_expires),
     }
 }
 
-pub fn execute_update_config(
+fn execute_extend_expires(
+    deps: DepsMut,
+    _env: Env,
+    info: MessageInfo,
+    name: String,
+    old_expires: Timestamp,
+    new_expires: Timestamp,
+) -> Result<Response, ContractError> {
+    let config = CONFIG.load(deps.storage)?;
+    if config.admin != info.sender {
+        return Err(ContractError::Unauthorized {});
+    }
+    let name_contract = NAME_CONTRACT.load(deps.storage)?;
+    let msg = aurans_name::ExecuteMsg::Extension {
+        msg: aurans_name::NameExecuteMsg::ExtendExpires {
+            token_id: format!("{}@{}", name.clone(), old_expires.seconds()),
+            new_expires: new_expires,
+        },
+    };
+    let extend_msg = WasmMsg::Execute {
+        contract_addr: name_contract.to_string(),
+        msg: to_binary(&msg)?,
+        funds: vec![],
+    };
+    Ok(Response::new()
+        .add_message(extend_msg)
+        .add_attribute("action", "extend_expires")
+        .add_attribute("name", name)
+        .add_attribute("new_expires", new_expires.to_string()))
+}
+
+fn execute_register(
+    deps: DepsMut,
+    env: Env,
+    info: MessageInfo,
+    name: String,
+    bech32_prefixes: Vec<String>,
+    backend_signature: Binary,
+    metadata: Metadata,
+) -> Result<Response, ContractError> {
+    let config = CONFIG.load(deps.storage)?;
+    // If not owner, check verification msg
+    if config.admin != info.sender {
+        let verify_msg_json = json!({
+            "name": name,
+            "bech32_prefixes": bech32_prefixes,
+            "sender": info.sender.to_string(),
+            "chain_id": env.block.chain_id,
+        });
+        let verify_msg_str =
+            serde_json::to_string(&verify_msg_json).map_err(|_| ContractError::SerdeError)?;
+
+        let verifier = VERIFIER.load(deps.storage)?;
+
+        verify_signature(
+            deps.as_ref(),
+            &verify_msg_str,
+            &backend_signature.as_slice(),
+            &verifier.backend_pubkey,
+        )?;
+    }
+
+    // Check fee
+    let fee = calc_price(deps.as_ref(), &name)?;
+    check_fee(fee, &info.funds)?;
+
+    // Call mint msg
+    let name_contract = NAME_CONTRACT.load(deps.storage)?;
+    let mint_msg = WasmMsg::Execute {
+        contract_addr: name_contract.to_string(),
+        msg: to_binary(&aurans_name::ExecuteMsg::Mint {
+            token_id: name.clone(),
+            owner: info.sender.to_string(),
+            token_uri: None,
+            extension: Metadata {
+                image: metadata.image,
+                image_data: metadata.image_data,
+                external_url: metadata.external_url,
+                description: metadata.description,
+                name: metadata.name,
+                attributes: metadata.attributes,
+                background_color: metadata.background_color,
+                animation_url: metadata.animation_url,
+                youtube_url: metadata.youtube_url,
+                royalty_percentage: metadata.royalty_percentage,
+                royalty_payment_address: metadata.royalty_payment_address,
+                bech32_prefixes: bech32_prefixes.clone(),
+            },
+        })?,
+        funds: vec![],
+    };
+
+    Ok(Response::new()
+        .add_message(mint_msg)
+        .add_attribute("action", "register")
+        .add_attribute("name", name)
+        .add_attribute("bech32_prefixes", bech32_prefixes.join("-"))
+        .add_attribute("backend_signature", backend_signature.to_string()))
+}
+
+fn execute_update_verifier(
+    deps: DepsMut,
+    _env: Env,
+    info: MessageInfo,
+    backend_pubkey: Binary,
+) -> Result<Response, ContractError> {
+    let config = CONFIG.load(deps.storage)?;
+    if config.admin != info.sender {
+        return Err(ContractError::Unauthorized {});
+    }
+    VERIFIER.save(
+        deps.storage,
+        &Verifier {
+            backend_pubkey: backend_pubkey.clone(),
+        },
+    )?;
+    Ok(Response::new()
+        .add_attribute("action", "update_verifier")
+        .add_attribute("backend_pubkey", backend_pubkey.to_string()))
+}
+
+fn execute_update_prices(
+    deps: DepsMut,
+    _env: Env,
+    info: MessageInfo,
+    prices: Vec<(u8, Coin)>,
+) -> Result<Response, ContractError> {
+    let config = CONFIG.load(deps.storage)?;
+    if config.admin != info.sender {
+        return Err(ContractError::Unauthorized {});
+    }
+
+    for (l, price) in &prices {
+        PRICE_INFO.update(deps.storage, *l, |d| -> StdResult<Coin> {
+            match d {
+                Some(coin) => Ok(coin),
+                None => Ok(Coin {
+                    denom: price.denom.clone(),
+                    amount: price.amount,
+                }),
+            }
+        })?;
+    }
+
+    Ok(Response::new()
+        .add_attribute("action", "update_prices")
+        .add_attribute(
+            "prices",
+            prices
+                .iter()
+                .map(|(l, price)| format!("{}:{}", l, price.to_string()))
+                .collect::<Vec<String>>()
+                .join("-"),
+        ))
+}
+
+fn execute_update_config(
     deps: DepsMut,
     _env: Env,
     info: MessageInfo,

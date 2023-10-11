@@ -35,6 +35,7 @@ thiserror = { workspace = true }
 aurans-name = { workspace = true }
 aurans-resolver = { workspace = true }
 sha2 = { workspace = true }
+serde_json = { workspace = true }
 
 [dev-dependencies]
 cw-multi-test = { workspace = true }

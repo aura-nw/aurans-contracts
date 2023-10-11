@@ -32,7 +32,7 @@ pub struct Metadata {
     pub royalty_payment_address: Option<String>,
 
     // List bech32 prefix register
-    pub bech32_prefix_registed: Vec<String>,
+    pub bech32_prefixes: Vec<String>,
 }
 
 #[cw_serde]

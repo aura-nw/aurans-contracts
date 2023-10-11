@@ -1,13 +1,10 @@
-use cosmwasm_std::{Coin, Storage};
+use cosmwasm_std::{Coin, Deps};
 
-use crate::{
-    error::ContractError,
-    state::{NameLen, PRICE_INFO},
-};
+use crate::{error::ContractError, state::PRICE_INFO};
 
-pub fn calc_price(storage: &dyn Storage, name: &str) -> Result<Coin, ContractError> {
-    let name_len = NameLen::from_len(&name.len());
-    let price = PRICE_INFO.load(storage, &name_len.to_string())?;
+pub fn calc_price(deps: Deps, name: &str) -> Result<Coin, ContractError> {
+    let name_len = name.len() as u8;
+    let price = PRICE_INFO.load(deps.storage, name_len)?;
     Ok(price)
 }
 

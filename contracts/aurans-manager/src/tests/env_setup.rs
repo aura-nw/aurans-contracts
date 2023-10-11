@@ -98,35 +98,35 @@ pub mod env {
                     admin: ADMIN.to_string(),
                     prices: vec![
                         (
-                            "one".to_owned(),
+                            1,
                             Coin {
                                 denom: NATIVE_DENOM.to_string(),
                                 amount: Uint128::from(BASE_PRICE * 100),
                             },
                         ),
                         (
-                            "two".to_owned(),
+                            2,
                             Coin {
                                 denom: NATIVE_DENOM.to_string(),
                                 amount: Uint128::from(BASE_PRICE * 50),
                             },
                         ),
                         (
-                            "three".to_owned(),
+                            3,
                             Coin {
                                 denom: NATIVE_DENOM.to_string(),
                                 amount: Uint128::from(BASE_PRICE * 20),
                             },
                         ),
                         (
-                            "four".to_owned(),
+                            4,
                             Coin {
                                 denom: NATIVE_DENOM.to_string(),
                                 amount: Uint128::from(BASE_PRICE * 10),
                             },
                         ),
                         (
-                            "other".to_owned(),
+                            5,
                             Coin {
                                 denom: NATIVE_DENOM.to_string(),
                                 amount: Uint128::from(BASE_PRICE),
