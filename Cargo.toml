@@ -18,9 +18,11 @@ optimize = """docker run --rm -v "$(pwd)":/code \
 """
 
 [workspace.dependencies]
-aurans-manager = { path = "./contracts/aurans-manager" }
-aurans-name = { path = "./contracts/aurans-name" }
-aurans-resolver = { path = "./contracts/aurans-resolver" }
+aurans-manager = { path = "./contracts/aurans-manager", features = ["library"] }
+aurans-name = { path = "./contracts/aurans-name", features = ["library"] }
+aurans-resolver = { path = "./contracts/aurans-resolver", features = [
+  "library",
+] }
 cosmwasm-schema = "1.1.8"
 cosmwasm-std = "1.1.8"
 cosmwasm-storage = "1.1.8"
