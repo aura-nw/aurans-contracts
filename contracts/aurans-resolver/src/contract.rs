@@ -63,13 +63,13 @@ pub fn execute(
         ExecuteMsg::UpdateConfig { admin } => execute_update_config(deps, env, info, admin),
         ExecuteMsg::UpdateRecord {
             name,
-            list_bech32_prefix,
+            bech32_prefixes,
             address,
-        } => execute_update_record(deps, env, info, name, list_bech32_prefix, address),
+        } => execute_update_record(deps, env, info, name, bech32_prefixes, address),
         ExecuteMsg::DeleteRecord {
             name,
-            list_bech32_prefix,
-        } => execute_delete_record(deps, env, info, name, list_bech32_prefix),
+            bech32_prefixes,
+        } => execute_delete_record(deps, env, info, name, bech32_prefixes),
         ExecuteMsg::UpdateNameContract { name_contract } => {
             execute_update_name_contract(deps, env, info, name_contract)
         }
@@ -148,13 +148,13 @@ fn execute_update_record(
     _env: Env,
     info: MessageInfo,
     name: String,
-    list_bech32_prefix: Vec<String>,
+    bech32_prefixes: Vec<String>,
     address: String,
 ) -> Result<Response, ContractError> {
     let config = CONFIG.load(deps.storage)?;
     can_execute(deps.as_ref(), &config, &info.sender)?;
 
-    for bech32_prefix in &list_bech32_prefix {
+    for bech32_prefix in &bech32_prefixes {
         records().save(deps.storage, (&name, &bech32_prefix), &address)?;
     }
     Ok(Response::new()
@@ -162,7 +162,7 @@ fn execute_update_record(
         .add_attribute("name", &name)
         .add_attribute(
             "list_bech32_prefix",
-            &list_bech32_prefix.into_iter().collect::<String>(),
+            &bech32_prefixes.into_iter().collect::<String>(),
         )
         .add_attribute("address", &address))
 }
@@ -172,12 +172,12 @@ fn execute_delete_record(
     _env: Env,
     info: MessageInfo,
     name: String,
-    list_bech32_prefix: Vec<String>,
+    bech32_prefixes: Vec<String>,
 ) -> Result<Response, ContractError> {
     let config = CONFIG.load(deps.storage)?;
     can_execute(deps.as_ref(), &config, &info.sender)?;
 
-    for bech32_prefix in &list_bech32_prefix {
+    for bech32_prefix in &bech32_prefixes {
         records().remove(deps.storage, (&name, &bech32_prefix))?;
     }
     Ok(Response::new()
@@ -185,7 +185,7 @@ fn execute_delete_record(
         .add_attribute("name", &name)
         .add_attribute(
             "list_bech32_prefix",
-            &list_bech32_prefix.into_iter().collect::<String>(),
+            &bech32_prefixes.into_iter().collect::<String>(),
         ))
 }
 

@@ -14,4 +14,25 @@ pub enum ContractError {
 
     #[error("Already registered")]
     UserRegistered {},
+
+    #[error("Verification Error")]
+    VerificationError,
+
+    #[error("Invalid Signature")]
+    InvalidSignature,
+
+    #[error("Invalid Address")]
+    InvalidAddress,
+
+    #[error("Serde Error")]
+    SerdeError,
+
+    #[error("Insufficient Funds")]
+    InsufficientFunds,
+
+    #[error("Invalid Arguments")]
+    InvalidArguments,
+
+    #[error("Invalid Year Register")]
+    InvalidYearRegister,
 }

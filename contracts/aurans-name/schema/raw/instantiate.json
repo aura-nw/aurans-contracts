@@ -6,7 +6,7 @@
   "required": [
     "admin",
     "minter",
-    "resolver_contract"
+    "resolver_code_id"
   ],
   "properties": {
     "admin": {
@@ -16,8 +16,10 @@
       "description": "The minter is the only one who can create new NFTs. This is designed for a base NFT that is controlled by an external program or contract. You will likely replace this with custom logic in custom NFTs",
       "type": "string"
     },
-    "resolver_contract": {
-      "type": "string"
+    "resolver_code_id": {
+      "type": "integer",
+      "format": "uint64",
+      "minimum": 0.0
     }
   },
   "additionalProperties": false

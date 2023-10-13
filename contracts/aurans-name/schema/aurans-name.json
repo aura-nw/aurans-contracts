@@ -10,7 +10,7 @@
     "required": [
       "admin",
       "minter",
-      "resolver_contract"
+      "resolver_code_id"
     ],
     "properties": {
       "admin": {
@@ -20,8 +20,10 @@
         "description": "The minter is the only one who can create new NFTs. This is designed for a base NFT that is controlled by an external program or contract. You will likely replace this with custom logic in custom NFTs",
         "type": "string"
       },
-      "resolver_contract": {
-        "type": "string"
+      "resolver_code_id": {
+        "type": "integer",
+        "format": "uint64",
+        "minimum": 0.0
       }
     },
     "additionalProperties": false
@@ -411,7 +413,9 @@
       "Metadata": {
         "type": "object",
         "required": [
-          "bech32_prefix_registed"
+          "bech32_prefixes",
+          "expires",
+          "years"
         ],
         "properties": {
           "animation_url": {
@@ -435,7 +439,7 @@
               "null"
             ]
           },
-          "bech32_prefix_registed": {
+          "bech32_prefixes": {
             "type": "array",
             "items": {
               "type": "string"
@@ -446,6 +450,9 @@
               "string",
               "null"
             ]
+          },
+          "expires": {
+            "$ref": "#/definitions/Timestamp"
           },
           "external_url": {
             "type": [
@@ -487,6 +494,11 @@
             "format": "uint64",
             "minimum": 0.0
           },
+          "years": {
+            "type": "integer",
+            "format": "uint8",
+            "minimum": 0.0
+          },
           "youtube_url": {
             "type": [
               "string",
@@ -507,14 +519,10 @@
               "update_config": {
                 "type": "object",
                 "required": [
-                  "admin",
-                  "resolver_contract"
+                  "admin"
                 ],
                 "properties": {
                   "admin": {
-                    "type": "string"
-                  },
-                  "resolver_contract": {
                     "type": "string"
                   }
                 },

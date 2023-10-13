@@ -74,14 +74,14 @@
             "type": "object",
             "required": [
               "address",
-              "list_bech32_prefix",
+              "bech32_prefixes",
               "name"
             ],
             "properties": {
               "address": {
                 "type": "string"
               },
-              "list_bech32_prefix": {
+              "bech32_prefixes": {
                 "type": "array",
                 "items": {
                   "type": "string"
@@ -105,11 +105,11 @@
           "delete_record": {
             "type": "object",
             "required": [
-              "list_bech32_prefix",
+              "bech32_prefixes",
               "name"
             ],
             "properties": {
-              "list_bech32_prefix": {
+              "bech32_prefixes": {
                 "type": "array",
                 "items": {
                   "type": "string"

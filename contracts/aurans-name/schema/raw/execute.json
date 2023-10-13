@@ -383,7 +383,9 @@
     "Metadata": {
       "type": "object",
       "required": [
-        "bech32_prefix_registed"
+        "bech32_prefixes",
+        "expires",
+        "years"
       ],
       "properties": {
         "animation_url": {
@@ -407,7 +409,7 @@
             "null"
           ]
         },
-        "bech32_prefix_registed": {
+        "bech32_prefixes": {
           "type": "array",
           "items": {
             "type": "string"
@@ -418,6 +420,9 @@
             "string",
             "null"
           ]
+        },
+        "expires": {
+          "$ref": "#/definitions/Timestamp"
         },
         "external_url": {
           "type": [
@@ -459,6 +464,11 @@
           "format": "uint64",
           "minimum": 0.0
         },
+        "years": {
+          "type": "integer",
+          "format": "uint8",
+          "minimum": 0.0
+        },
         "youtube_url": {
           "type": [
             "string",
@@ -479,14 +489,10 @@
             "update_config": {
               "type": "object",
               "required": [
-                "admin",
-                "resolver_contract"
+                "admin"
               ],
               "properties": {
                 "admin": {
-                  "type": "string"
-                },
-                "resolver_contract": {
                   "type": "string"
                 }
               },

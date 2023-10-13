@@ -1,5 +1,5 @@
 use cosmwasm_schema::cw_serde;
-use cosmwasm_std::Addr;
+use cosmwasm_std::{Addr, Timestamp};
 use cw_storage_plus::Item;
 
 #[cw_serde]
@@ -32,13 +32,21 @@ pub struct Metadata {
     pub royalty_payment_address: Option<String>,
 
     // List bech32 prefix register
-    pub bech32_prefix_registed: Vec<String>,
+    pub bech32_prefixes: Vec<String>,
+    // Expires of name nft
+    pub expires: Timestamp,
+    pub years: u8,
 }
 
 #[cw_serde]
 pub struct Config {
     pub admin: Addr,
-    pub resolver_contract: Addr,
+}
+
+#[cw_serde]
+pub struct Resolver {
+    pub address: Addr,
 }
 
 pub const CONFIG: Item<Config> = Item::new("config");
+pub const RESOLVER: Item<Resolver> = Item::new("resolver");

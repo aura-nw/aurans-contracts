@@ -1,10 +1,8 @@
-use std::vec;
-
 #[cfg(not(feature = "library"))]
 use cosmwasm_std::entry_point;
 use cosmwasm_std::{
-    to_binary, Binary, Deps, DepsMut, Empty, Env, MessageInfo, Response, StdResult, Timestamp,
-    WasmMsg,
+    to_binary, Binary, CosmosMsg, Deps, DepsMut, Empty, Env, MessageInfo, Reply, ReplyOn, Response,
+    StdResult, SubMsg, Timestamp, WasmMsg,
 };
 use cw2::set_contract_version;
 use cw721::{ContractInfoResponse, Cw721ReceiveMsg};
@@ -16,10 +14,13 @@ use cw721_base::ExecuteMsg::{
 
 use cw721_base::QueryMsg::Extension as QExtension;
 
+use aurans_resolver::msg::InstantiateMsg as ResolverInstantiateMsg;
 use aurans_resolver::ExecuteMsg::{DeleteNames, UpdateRecord};
+use cw_utils::parse_reply_instantiate_data;
+use std::vec;
 
 use crate::error::ContractError;
-use crate::state::{Config, Metadata, CONFIG};
+use crate::state::{Config, Metadata, Resolver, CONFIG, RESOLVER};
 
 use crate::msg::{ExecuteMsg, InstantiateMsg, MigrateMsg, NameExecuteMsg, NameQueryMsg, QueryMsg};
 use crate::util::extract_name_from_token_id;
@@ -29,7 +30,7 @@ const CONTRACT_NAME: &str = "crates.io:aurans-name";
 const CONTRACT_VERSION: &str = env!("CARGO_PKG_VERSION");
 
 const AURANS_NAME: &str = "aurans-name";
-const AURANS_SYMBOL: &str = "aurans";
+const AURANS_SYMBOL: &str = "ans";
 
 /// This contract extends the Cw721 contract from CosmWasm to create non-fungible tokens (NFTs)
 /// that represent unique names. Each name is represented as a unique NFT.
@@ -40,7 +41,7 @@ pub type NameCw721<'a> = Cw721Contract<'a, Metadata, Empty, NameExecuteMsg, Name
 #[cfg_attr(not(feature = "library"), entry_point)]
 pub fn instantiate(
     deps: DepsMut,
-    _env: Env,
+    env: Env,
     _info: MessageInfo,
     msg: InstantiateMsg,
 ) -> Result<Response, ContractError> {
@@ -49,7 +50,6 @@ pub fn instantiate(
     // save contract config
     let config = Config {
         admin: deps.api.addr_validate(&msg.admin)?,
-        resolver_contract: deps.api.addr_validate(&msg.resolver_contract)?,
     };
     CONFIG.save(deps.storage, &config)?;
 
@@ -65,11 +65,29 @@ pub fn instantiate(
     // initialize owner
     cw_ownable::initialize_owner(deps.storage, deps.api, Some(&msg.minter))?;
 
+    let resolver_ins_msg = CosmosMsg::Wasm(WasmMsg::Instantiate {
+        admin: Some(env.contract.address.to_string()),
+        code_id: msg.resolver_code_id,
+        msg: to_binary(&ResolverInstantiateMsg {
+            admin: config.admin.to_string(),
+        })?,
+        funds: vec![],
+        label: "resolver".to_owned(),
+    });
+
+    let resolver_sub_msg = SubMsg {
+        id: 1,
+        msg: resolver_ins_msg,
+        gas_limit: None,
+        reply_on: ReplyOn::Success,
+    };
+
     Ok(Response::new()
+        .add_submessage(resolver_sub_msg)
         .add_attribute("action", "instantiate")
         .add_attribute("admin", &msg.admin.to_string())
-        .add_attribute("resolver_contract", &msg.resolver_contract.to_string())
-        .add_attribute("minter", msg.minter.to_string()))
+        .add_attribute("minter", msg.minter.to_string())
+        .add_attribute("resolver_code_id", msg.resolver_code_id.to_string()))
 }
 
 #[cfg_attr(not(feature = "library"), entry_point)]
@@ -106,10 +124,7 @@ pub fn execute(
             extension,
         } => execute_mint(deps, env, info, token_id, owner, token_uri, extension),
         EExtension { msg } => match msg {
-            NameExecuteMsg::UpdateConfig {
-                admin,
-                resolver_contract,
-            } => execute_update_config(deps, env, info, admin, resolver_contract),
+            NameExecuteMsg::UpdateConfig { admin } => execute_update_config(deps, env, info, admin),
             NameExecuteMsg::ExtendExpires {
                 token_id,
                 new_expires,
@@ -142,7 +157,7 @@ fn execute_mint(
     token_uri: Option<String>,
     extension: Metadata,
 ) -> Result<Response, ContractError> {
-    let config = CONFIG.load(deps.storage)?;
+    let resolver = RESOLVER.load(deps.as_ref().storage)?;
     let name_cw721 = NameCw721::default();
     name_cw721.mint(
         deps,
@@ -156,11 +171,11 @@ fn execute_mint(
     let (name, expires) = extract_name_from_token_id(token_id.as_ref())?;
     let update_record = UpdateRecord {
         name: name.to_owned(),
-        list_bech32_prefix: extension.clone().bech32_prefix_registed,
+        bech32_prefixes: extension.clone().bech32_prefixes,
         address: owner.clone(),
     };
     let update_resolver_msg = WasmMsg::Execute {
-        contract_addr: config.resolver_contract.to_string(),
+        contract_addr: resolver.address.to_string(),
         msg: to_binary(&update_record)?,
         funds: vec![],
     };
@@ -173,8 +188,8 @@ fn execute_mint(
         .add_attribute("token_id", token_id)
         .add_attribute("expires", expires.to_string())
         .add_attribute(
-            "bech32_prefix_registed",
-            extension.bech32_prefix_registed.join("-"),
+            "bech32_prefixes",
+            extension.bech32_prefixes.join("-"),
         ))
 }
 
@@ -185,18 +200,18 @@ fn execute_transfer_nft(
     recipient: String,
     token_id: String,
 ) -> Result<Response, ContractError> {
-    let config = CONFIG.load(deps.storage)?;
+    let resolver = RESOLVER.load(deps.as_ref().storage)?;
     let name_cw721 = NameCw721::default();
     let token = name_cw721._transfer_nft(deps, &env, &info, &recipient, &token_id)?;
     let metadata = token.extension;
     let (name, _) = extract_name_from_token_id(token_id.as_ref())?;
     let update_record = UpdateRecord {
         name: name.to_owned(),
-        list_bech32_prefix: metadata.bech32_prefix_registed,
+        bech32_prefixes: metadata.bech32_prefixes,
         address: recipient.clone(),
     };
     let update_resolver_msg = WasmMsg::Execute {
-        contract_addr: config.resolver_contract.to_string(),
+        contract_addr: resolver.address.to_string(),
         msg: to_binary(&update_record)?,
         funds: vec![],
     };
@@ -217,7 +232,7 @@ fn execute_send_nft(
     token_id: String,
     msg: Binary,
 ) -> Result<Response, ContractError> {
-    let config = CONFIG.load(deps.storage)?;
+    let resolver = RESOLVER.load(deps.as_ref().storage)?;
     let name_cw721 = NameCw721::default();
     let token = name_cw721._transfer_nft(deps, &env, &info, &contract, &token_id)?;
     let send = Cw721ReceiveMsg {
@@ -229,11 +244,11 @@ fn execute_send_nft(
     let (name, _) = extract_name_from_token_id(token_id.as_ref())?;
     let update_record = UpdateRecord {
         name: name.to_owned(),
-        list_bech32_prefix: metadata.bech32_prefix_registed,
+        bech32_prefixes: metadata.bech32_prefixes,
         address: contract.clone(),
     };
     let update_resolver_msg = WasmMsg::Execute {
-        contract_addr: config.resolver_contract.to_string(),
+        contract_addr: resolver.address.to_string(),
         msg: to_binary(&update_record)?,
         funds: vec![],
     };
@@ -259,12 +274,10 @@ fn execute_update_resolver(
         return Err(ContractError::Unauthorized {});
     }
 
-    // update config with new resolver
-    let new_config = Config {
-        admin: config.admin,
-        resolver_contract: deps.api.addr_validate(&resolver)?,
+    let r = Resolver {
+        address: deps.api.addr_validate(&resolver)?,
     };
-    CONFIG.save(deps.storage, &new_config)?;
+    RESOLVER.save(deps.storage, &r)?;
 
     Ok(Response::new()
         .add_attribute("action", "update_resolver")
@@ -276,7 +289,6 @@ fn execute_update_config(
     _env: Env,
     info: MessageInfo,
     admin: String,
-    resolver_contract: String,
 ) -> Result<Response, ContractError> {
     // only contract admin can update config
     let config = CONFIG.load(deps.storage)?;
@@ -287,14 +299,12 @@ fn execute_update_config(
     // update config
     let new_config = Config {
         admin: deps.api.addr_validate(&admin)?,
-        resolver_contract: deps.api.addr_validate(&resolver_contract)?,
     };
     CONFIG.save(deps.storage, &new_config)?;
 
     Ok(Response::new()
         .add_attribute("action", "update_config")
-        .add_attribute("admin", &admin)
-        .add_attribute("resolver_contract", &resolver_contract))
+        .add_attribute("admin", &admin))
 }
 
 // REQUIRED: sender must be minter
@@ -305,12 +315,11 @@ fn execute_extend_expires(
     token_id: String,
     new_expires: Timestamp,
 ) -> Result<Response, ContractError> {
-    let config = CONFIG.load(deps.storage)?;
     let name_cw721 = NameCw721::default();
     let mut old_token = name_cw721.tokens.load(deps.storage, &token_id)?;
 
     let old_metadata = old_token.clone().extension;
-    old_token.extension.bech32_prefix_registed = old_metadata.bech32_prefix_registed.clone();
+    old_token.extension.bech32_prefixes = old_metadata.bech32_prefixes.clone();
 
     // Burn old token
     name_cw721.tokens.remove(deps.storage, &token_id)?;
@@ -320,6 +329,8 @@ fn execute_extend_expires(
         .add_attribute("action", "burn")
         .add_attribute("sender", &info.sender)
         .add_attribute("token_id", &token_id);
+
+    let resolver = RESOLVER.load(deps.as_ref().storage)?;
 
     // Mint new token
     let (name, _) = extract_name_from_token_id(token_id.as_ref())?;
@@ -338,7 +349,7 @@ fn execute_extend_expires(
         names: vec![name.to_owned()],
     };
     let delete_resolver_msg = WasmMsg::Execute {
-        contract_addr: config.resolver_contract.to_string(),
+        contract_addr: resolver.address.to_string(),
         msg: to_binary(&delete_names)?,
         funds: vec![],
     };
@@ -346,11 +357,11 @@ fn execute_extend_expires(
     // Update resolver
     let update_record = UpdateRecord {
         name: name.to_owned(),
-        list_bech32_prefix: old_metadata.bech32_prefix_registed,
+        bech32_prefixes: old_metadata.bech32_prefixes,
         address: old_token.owner.to_string(),
     };
     let update_resolver_msg = WasmMsg::Execute {
-        contract_addr: config.resolver_contract.to_string(),
+        contract_addr: resolver.address.to_string(),
         msg: to_binary(&update_record)?,
         funds: vec![],
     };
@@ -361,7 +372,7 @@ fn execute_extend_expires(
         .add_attribute("action", "mint")
         .add_attribute("minter", info.sender)
         .add_attribute("owner", old_token.owner.to_string())
-        .add_attribute("token_id", token_id);
+        .add_attribute("token_id", new_token_id);
     Ok(response)
 }
 
@@ -394,9 +405,9 @@ fn execute_evict_batch(
         names.push(name.to_owned());
     }
     let delete_names = DeleteNames { names };
-    let config = CONFIG.load(deps.storage)?;
+    let resolver = RESOLVER.load(deps.as_ref().storage)?;
     let delete_resolver_msg = WasmMsg::Execute {
-        contract_addr: config.resolver_contract.to_string(),
+        contract_addr: resolver.address.to_string(),
         msg: to_binary(&delete_names)?,
         funds: vec![],
     };
@@ -424,4 +435,17 @@ pub fn query(deps: Deps, env: Env, msg: QueryMsg) -> StdResult<Binary> {
 
 fn query_config(deps: Deps) -> StdResult<Config> {
     CONFIG.load(deps.storage)
+}
+
+#[cfg_attr(not(feature = "library"), entry_point)]
+pub fn reply(deps: DepsMut, _env: Env, msg: Reply) -> StdResult<Response> {
+    let reply = parse_reply_instantiate_data(msg).unwrap();
+
+    let resolver_address = reply.contract_address;
+    let r = Resolver {
+        address: deps.api.addr_validate(&resolver_address)?,
+    };
+    RESOLVER.save(deps.storage, &r)?;
+
+    Ok(Response::new().add_attribute("resolver_address", resolver_address.to_string()))
 }

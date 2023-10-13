@@ -20,12 +20,12 @@ pub enum ExecuteMsg {
     },
     UpdateRecord {
         name: String,
-        list_bech32_prefix: Vec<String>,
+        bech32_prefixes: Vec<String>,
         address: String,
     },
     DeleteRecord {
         name: String,
-        list_bech32_prefix: Vec<String>,
+        bech32_prefixes: Vec<String>,
     },
     DeleteNames {
         names: Vec<String>,
