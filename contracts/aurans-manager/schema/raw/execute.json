@@ -103,19 +103,12 @@
           "type": "object",
           "required": [
             "backend_signature",
-            "bech32_prefixes",
             "metadata",
             "name"
           ],
           "properties": {
             "backend_signature": {
               "$ref": "#/definitions/Binary"
-            },
-            "bech32_prefixes": {
-              "type": "array",
-              "items": {
-                "type": "string"
-              }
             },
             "metadata": {
               "$ref": "#/definitions/Metadata"
@@ -138,11 +131,15 @@
         "extend_expires": {
           "type": "object",
           "required": [
+            "backend_signature",
             "name",
             "new_expires",
             "old_expires"
           ],
           "properties": {
+            "backend_signature": {
+              "$ref": "#/definitions/Binary"
+            },
             "name": {
               "type": "string"
             },
@@ -182,7 +179,9 @@
     "Metadata": {
       "type": "object",
       "required": [
-        "bech32_prefixes"
+        "bech32_prefixes",
+        "expires",
+        "years"
       ],
       "properties": {
         "animation_url": {
@@ -217,6 +216,9 @@
             "string",
             "null"
           ]
+        },
+        "expires": {
+          "$ref": "#/definitions/Timestamp"
         },
         "external_url": {
           "type": [
@@ -256,6 +258,11 @@
             "null"
           ],
           "format": "uint64",
+          "minimum": 0.0
+        },
+        "years": {
+          "type": "integer",
+          "format": "uint8",
           "minimum": 0.0
         },
         "youtube_url": {

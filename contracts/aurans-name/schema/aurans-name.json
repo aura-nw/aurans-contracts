@@ -413,7 +413,9 @@
       "Metadata": {
         "type": "object",
         "required": [
-          "bech32_prefixes"
+          "bech32_prefixes",
+          "expires",
+          "years"
         ],
         "properties": {
           "animation_url": {
@@ -448,6 +450,9 @@
               "string",
               "null"
             ]
+          },
+          "expires": {
+            "$ref": "#/definitions/Timestamp"
           },
           "external_url": {
             "type": [
@@ -487,6 +492,11 @@
               "null"
             ],
             "format": "uint64",
+            "minimum": 0.0
+          },
+          "years": {
+            "type": "integer",
+            "format": "uint8",
             "minimum": 0.0
           },
           "youtube_url": {

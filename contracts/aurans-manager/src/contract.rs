@@ -1,4 +1,3 @@
-use aurans_name::state::Metadata;
 #[cfg(not(feature = "library"))]
 use cosmwasm_std::entry_point;
 use cosmwasm_std::{
@@ -14,10 +13,9 @@ use crate::state::{
     years_from_expires, Config, Verifier, CONFIG, NAME_CONTRACT, PRICE_INFO, VERIFIER,
 };
 use crate::verify::verify_signature;
+use aurans_name::state::Metadata;
 
 use serde_json::json;
-
-use aurans_name::msg::InstantiateMsg as NameInstantiateMsg;
 
 // version info for migration info
 const CONTRACT_NAME: &str = "crates.io:aurans-manager";
@@ -57,7 +55,7 @@ pub fn instantiate(
     let name_ins_msg = CosmosMsg::Wasm(WasmMsg::Instantiate {
         admin: Some(env.contract.address.to_string()),
         code_id: config.name_code_id,
-        msg: to_binary(&NameInstantiateMsg {
+        msg: to_binary(&aurans_name::InstantiateMsg {
             admin: config.admin.to_string(),
             minter: env.contract.address.to_string(),
             resolver_code_id: config.resolver_code_id,
