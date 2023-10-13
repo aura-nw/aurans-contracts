@@ -30,15 +30,15 @@ pub enum ExecuteMsg {
     },
     Register {
         name: String,
-        bech32_prefixes: Vec<String>,
         backend_signature: Binary,
         metadata: Metadata,
     },
     ExtendExpires {
         name: String,
+        backend_signature: Binary,
         old_expires: Timestamp,
         new_expires: Timestamp,
-    }
+    },
 }
 
 /// Message type for `migrate` entry_point

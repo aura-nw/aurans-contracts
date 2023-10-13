@@ -10,7 +10,9 @@ use cw_utils::parse_reply_instantiate_data;
 
 use crate::error::ContractError;
 use crate::price::{calc_price, check_fee};
-use crate::state::{Config, Verifier, CONFIG, NAME_CONTRACT, PRICE_INFO, VERIFIER};
+use crate::state::{
+    years_from_expires, Config, Verifier, CONFIG, NAME_CONTRACT, PRICE_INFO, VERIFIER,
+};
 use crate::verify::verify_signature;
 
 use serde_json::json;
@@ -20,6 +22,8 @@ use aurans_name::msg::InstantiateMsg as NameInstantiateMsg;
 // version info for migration info
 const CONTRACT_NAME: &str = "crates.io:aurans-manager";
 const CONTRACT_VERSION: &str = env!("CARGO_PKG_VERSION");
+
+const MAX_YEAR_REGISTER: u8 = 5;
 
 use crate::msg::{ExecuteMsg, InstantiateMsg, MigrateMsg, QueryMsg};
 
@@ -115,37 +119,65 @@ pub fn execute(
         }
         ExecuteMsg::Register {
             name,
-            bech32_prefixes,
             backend_signature,
             metadata,
-        } => execute_register(
+        } => execute_register(deps, env, info, name, backend_signature, metadata),
+        ExecuteMsg::ExtendExpires {
+            name,
+            backend_signature,
+            old_expires,
+            new_expires,
+        } => execute_extend_expires(
             deps,
             env,
             info,
             name,
-            bech32_prefixes,
             backend_signature,
-            metadata,
-        ),
-        ExecuteMsg::ExtendExpires {
-            name,
             old_expires,
             new_expires,
-        } => execute_extend_expires(deps, env, info, name, old_expires, new_expires),
+        ),
     }
 }
 
 fn execute_extend_expires(
     deps: DepsMut,
-    _env: Env,
+    env: Env,
     info: MessageInfo,
     name: String,
+    backend_signature: Binary,
     old_expires: Timestamp,
     new_expires: Timestamp,
 ) -> Result<Response, ContractError> {
+    let years = years_from_expires(&old_expires, &new_expires);
+    if years > MAX_YEAR_REGISTER as u64 {
+        return Err(ContractError::InvalidYearRegister);
+    }
+
+    // Check fee
+    let fee = calc_price(deps.as_ref(), &name, &(years as u8))?;
+    check_fee(fee, &info.funds)?;
+
     let config = CONFIG.load(deps.storage)?;
+    // If not owner, check verification msg
     if config.admin != info.sender {
-        return Err(ContractError::Unauthorized {});
+        let verify_msg_json = json!({
+            "name": name,
+            "sender": info.sender.to_string(),
+            "chain_id": env.block.chain_id,
+            "old_expires": old_expires.clone().seconds(),
+            "new_expires": new_expires.clone().seconds(),
+        });
+        let verify_msg_str =
+            serde_json::to_string(&verify_msg_json).map_err(|_| ContractError::SerdeError)?;
+
+        let verifier = VERIFIER.load(deps.storage)?;
+
+        verify_signature(
+            deps.as_ref(),
+            &verify_msg_str,
+            &backend_signature.as_slice(),
+            &verifier.backend_pubkey,
+        )?;
     }
     let name_contract = NAME_CONTRACT.load(deps.storage)?;
     let msg = aurans_name::ExecuteMsg::Extension {
@@ -171,18 +203,29 @@ fn execute_register(
     env: Env,
     info: MessageInfo,
     name: String,
-    bech32_prefixes: Vec<String>,
     backend_signature: Binary,
     metadata: Metadata,
 ) -> Result<Response, ContractError> {
+    let years = metadata.years;
+    if years > MAX_YEAR_REGISTER {
+        return Err(ContractError::InvalidYearRegister);
+    }
+
+    // Check fee
+    let fee = calc_price(deps.as_ref(), &name, &years)?;
+    check_fee(fee, &info.funds)?;
+
     let config = CONFIG.load(deps.storage)?;
+    let bech32_prefixes = metadata.bech32_prefixes;
+    let expires = metadata.expires;
     // If not owner, check verification msg
     if config.admin != info.sender {
         let verify_msg_json = json!({
             "name": name,
-            "bech32_prefixes": bech32_prefixes,
+            "bech32_prefixes": bech32_prefixes.clone(),
             "sender": info.sender.to_string(),
             "chain_id": env.block.chain_id,
+            "expires": expires.clone().seconds(),
         });
         let verify_msg_str =
             serde_json::to_string(&verify_msg_json).map_err(|_| ContractError::SerdeError)?;
@@ -196,10 +239,6 @@ fn execute_register(
             &verifier.backend_pubkey,
         )?;
     }
-
-    // Check fee
-    let fee = calc_price(deps.as_ref(), &name)?;
-    check_fee(fee, &info.funds)?;
 
     // Call mint msg
     let name_contract = NAME_CONTRACT.load(deps.storage)?;
@@ -222,6 +261,8 @@ fn execute_register(
                 royalty_percentage: metadata.royalty_percentage,
                 royalty_payment_address: metadata.royalty_payment_address,
                 bech32_prefixes: bech32_prefixes.clone(),
+                expires: expires.clone(),
+                years: years.clone(),
             },
         })?,
         funds: vec![],
@@ -232,6 +273,7 @@ fn execute_register(
         .add_attribute("action", "register")
         .add_attribute("name", name)
         .add_attribute("bech32_prefixes", bech32_prefixes.join("-"))
+        .add_attribute("years", years.to_string())
         .add_attribute("backend_signature", backend_signature.to_string()))
 }
 

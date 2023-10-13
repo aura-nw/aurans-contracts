@@ -32,4 +32,7 @@ pub enum ContractError {
 
     #[error("Invalid Arguments")]
     InvalidArguments,
+
+    #[error("Invalid Year Register")]
+    InvalidYearRegister,
 }

@@ -1,5 +1,5 @@
 use cosmwasm_schema::cw_serde;
-use cosmwasm_std::Addr;
+use cosmwasm_std::{Addr, Timestamp};
 use cw_storage_plus::Item;
 
 #[cw_serde]
@@ -33,6 +33,9 @@ pub struct Metadata {
 
     // List bech32 prefix register
     pub bech32_prefixes: Vec<String>,
+    // Expires of name nft
+    pub expires: Timestamp,
+    pub years: u8,
 }
 
 #[cw_serde]

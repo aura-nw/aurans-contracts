@@ -171,7 +171,7 @@ fn execute_mint(
     let (name, expires) = extract_name_from_token_id(token_id.as_ref())?;
     let update_record = UpdateRecord {
         name: name.to_owned(),
-        list_bech32_prefix: extension.clone().bech32_prefixes,
+        bech32_prefixes: extension.clone().bech32_prefixes,
         address: owner.clone(),
     };
     let update_resolver_msg = WasmMsg::Execute {
@@ -207,7 +207,7 @@ fn execute_transfer_nft(
     let (name, _) = extract_name_from_token_id(token_id.as_ref())?;
     let update_record = UpdateRecord {
         name: name.to_owned(),
-        list_bech32_prefix: metadata.bech32_prefixes,
+        bech32_prefixes: metadata.bech32_prefixes,
         address: recipient.clone(),
     };
     let update_resolver_msg = WasmMsg::Execute {
@@ -244,7 +244,7 @@ fn execute_send_nft(
     let (name, _) = extract_name_from_token_id(token_id.as_ref())?;
     let update_record = UpdateRecord {
         name: name.to_owned(),
-        list_bech32_prefix: metadata.bech32_prefixes,
+        bech32_prefixes: metadata.bech32_prefixes,
         address: contract.clone(),
     };
     let update_resolver_msg = WasmMsg::Execute {
@@ -357,7 +357,7 @@ fn execute_extend_expires(
     // Update resolver
     let update_record = UpdateRecord {
         name: name.to_owned(),
-        list_bech32_prefix: old_metadata.bech32_prefixes,
+        bech32_prefixes: old_metadata.bech32_prefixes,
         address: old_token.owner.to_string(),
     };
     let update_resolver_msg = WasmMsg::Execute {
@@ -372,8 +372,7 @@ fn execute_extend_expires(
         .add_attribute("action", "mint")
         .add_attribute("minter", info.sender)
         .add_attribute("owner", old_token.owner.to_string())
-        .add_attribute("new_token_id", new_token_id)
-        .add_attribute("token_id", token_id);
+        .add_attribute("token_id", new_token_id);
     Ok(response)
 }
 
