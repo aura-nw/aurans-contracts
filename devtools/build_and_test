@@ -1,0 +1,55 @@
+#!/usr/bin/env bash
+#
+# Run various build and test steps.
+#
+# Usage: ./build_and_test [command]...
+#
+# The available commands are:
+#
+#       build           -- Build contracts with optimizer
+#       fmt             -- Runs cargo fmt
+#       test            -- Tests the contract
+#       check           -- Check contracts
+#
+# If no commands are specified every action is run.
+
+set -euo pipefail
+
+function exists() {
+  command -v "$1" &> /dev/null
+}
+
+function cmd_fmt() {
+  cargo fmt
+}
+
+function cmd_build() {
+  docker run --rm -v "$(pwd)":/code \
+  --mount type=volume,source="$(basename "$(pwd)")_cache",target=/code/target \
+  --mount type=volume,source=registry_cache,target=/usr/local/cargo/registry \
+  cosmwasm/workspace-optimizer:0.13.0
+}
+
+function cmd_check() {
+  cosmwasm-check artifacts/*.wasm
+}
+
+function cmd_test() {
+  cargo test
+}
+
+function main() {
+  cmds="$@"
+  if [[ $# == 0 ]]; then
+    cmds="fmt test build check"
+  fi
+
+  for cmd in $cmds; do
+    echo "=== $cmd ==="
+    cmd_$cmd
+    echo "Success ✅"
+    echo ""
+  done
+}
+
+main "$@"

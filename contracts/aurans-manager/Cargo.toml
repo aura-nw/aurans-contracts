@@ -32,8 +32,8 @@ cosmwasm-storage = { workspace = true }
 schemars = { workspace = true }
 serde = { workspace = true }
 thiserror = { workspace = true }
-aurans-name = { path = "../aurans-name", features = ["library"] }
-aurans-resolver = { path = "../aurans-resolver" }
+aurans-name = { workspace = true, features = ["library"] }
+aurans-resolver = { workspace = true }
 sha2 = { workspace = true }
 serde-json-wasm = { workspace = true }
 
