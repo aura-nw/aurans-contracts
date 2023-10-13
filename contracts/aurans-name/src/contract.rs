@@ -187,10 +187,7 @@ fn execute_mint(
         .add_attribute("owner", owner)
         .add_attribute("token_id", token_id)
         .add_attribute("expires", expires.to_string())
-        .add_attribute(
-            "bech32_prefixes",
-            extension.bech32_prefixes.join("-"),
-        ))
+        .add_attribute("bech32_prefixes", extension.bech32_prefixes.join("-")))
 }
 
 fn execute_transfer_nft(

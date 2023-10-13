@@ -52,3 +52,21 @@ pub enum QueryMsg {
     #[returns(Config)]
     Config {},
 }
+
+#[cw_serde]
+pub enum VerifyMsg {
+    Register {
+        name: String,
+        sender: String,
+        chain_id: String,
+        bech32_prefixes: Vec<String>,
+        expires: u64,
+    },
+    ExtendExpires {
+        name: String,
+        sender: String,
+        chain_id: String,
+        old_expires: u64,
+        new_expires: u64,
+    },
+}

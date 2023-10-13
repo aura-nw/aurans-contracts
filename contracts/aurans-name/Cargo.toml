@@ -32,7 +32,7 @@ cosmwasm-storage = { workspace = true }
 schemars = { workspace = true }
 serde = { workspace = true }
 thiserror = { workspace = true }
-aurans-resolver = { workspace = true }
+aurans-resolver = { path="../aurans-resolver"}
 cw-ownable = { workspace = true }
 
 

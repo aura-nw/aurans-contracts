@@ -32,10 +32,10 @@ cosmwasm-storage = { workspace = true }
 schemars = { workspace = true }
 serde = { workspace = true }
 thiserror = { workspace = true }
-aurans-name = { workspace = true }
-aurans-resolver = { workspace = true }
+aurans-name = { path = "../aurans-name", features = ["library"] }
+aurans-resolver = { path = "../aurans-resolver" }
 sha2 = { workspace = true }
-serde_json = { workspace = true }
+serde-json-wasm = { workspace = true }
 
 [dev-dependencies]
 cw-multi-test = { workspace = true }

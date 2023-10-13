@@ -15,15 +15,13 @@ use crate::state::{
 use crate::verify::verify_signature;
 use aurans_name::state::Metadata;
 
-use serde_json::json;
-
 // version info for migration info
 const CONTRACT_NAME: &str = "crates.io:aurans-manager";
 const CONTRACT_VERSION: &str = env!("CARGO_PKG_VERSION");
 
 const MAX_YEAR_REGISTER: u8 = 5;
 
-use crate::msg::{ExecuteMsg, InstantiateMsg, MigrateMsg, QueryMsg};
+use crate::msg::{ExecuteMsg, InstantiateMsg, MigrateMsg, QueryMsg, VerifyMsg};
 
 /// Handling contract instantiation
 #[cfg_attr(not(feature = "library"), entry_point)]
@@ -158,15 +156,15 @@ fn execute_extend_expires(
     let config = CONFIG.load(deps.storage)?;
     // If not owner, check verification msg
     if config.admin != info.sender {
-        let verify_msg_json = json!({
-            "name": name,
-            "sender": info.sender.to_string(),
-            "chain_id": env.block.chain_id,
-            "old_expires": old_expires.clone().seconds(),
-            "new_expires": new_expires.clone().seconds(),
-        });
+        let verify_msg = VerifyMsg::ExtendExpires {
+            name: name.clone(),
+            sender: info.sender.to_string(),
+            chain_id: env.block.chain_id,
+            old_expires: old_expires.clone().seconds(),
+            new_expires: new_expires.clone().seconds(),
+        };
         let verify_msg_str =
-            serde_json::to_string(&verify_msg_json).map_err(|_| ContractError::SerdeError)?;
+            serde_json_wasm::to_string(&verify_msg).map_err(|_| ContractError::SerdeError)?;
 
         let verifier = VERIFIER.load(deps.storage)?;
 
@@ -218,15 +216,15 @@ fn execute_register(
     let expires = metadata.expires;
     // If not owner, check verification msg
     if config.admin != info.sender {
-        let verify_msg_json = json!({
-            "name": name,
-            "bech32_prefixes": bech32_prefixes.clone(),
-            "sender": info.sender.to_string(),
-            "chain_id": env.block.chain_id,
-            "expires": expires.clone().seconds(),
-        });
+        let verify_msg = VerifyMsg::Register {
+            name: name.clone(),
+            sender: info.sender.to_string(),
+            chain_id: env.block.chain_id,
+            bech32_prefixes: bech32_prefixes.clone(),
+            expires: expires.clone().seconds(),
+        };
         let verify_msg_str =
-            serde_json::to_string(&verify_msg_json).map_err(|_| ContractError::SerdeError)?;
+            serde_json_wasm::to_string(&verify_msg).map_err(|_| ContractError::SerdeError)?;
 
         let verifier = VERIFIER.load(deps.storage)?;
 
