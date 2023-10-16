@@ -81,7 +81,7 @@ pub fn instantiate(
                 .iter()
                 .map(|(l, price)| format!("{}:{}", l, price.to_string()))
                 .collect::<Vec<String>>()
-                .join("-"),
+                .join(","),
         ))
 }
 
@@ -268,7 +268,7 @@ fn execute_register(
         .add_message(mint_msg)
         .add_attribute("action", "register")
         .add_attribute("name", name)
-        .add_attribute("bech32_prefixes", bech32_prefixes.join("-"))
+        .add_attribute("bech32_prefixes", bech32_prefixes.join(","))
         .add_attribute("years", years.to_string())
         .add_attribute("backend_signature", backend_signature.to_string()))
 }
@@ -325,7 +325,7 @@ fn execute_update_prices(
                 .iter()
                 .map(|(l, price)| format!("{}:{}", l, price.to_string()))
                 .collect::<Vec<String>>()
-                .join("-"),
+                .join(","),
         ))
 }
 
