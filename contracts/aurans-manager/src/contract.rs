@@ -1,8 +1,9 @@
+use aurans_name::util::join_name_and_expires;
 #[cfg(not(feature = "library"))]
 use cosmwasm_std::entry_point;
 use cosmwasm_std::{
-    to_binary, Binary, Coin, CosmosMsg, Deps, DepsMut, Env, MessageInfo, Reply, ReplyOn, Response,
-    StdResult, SubMsg, Timestamp, WasmMsg,
+    to_binary, Addr, Binary, Coin, CosmosMsg, Deps, DepsMut, Env, MessageInfo, Order, Reply,
+    ReplyOn, Response, StdResult, SubMsg, Timestamp, WasmMsg,
 };
 use cw2::set_contract_version;
 use cw_utils::parse_reply_instantiate_data;
@@ -21,7 +22,7 @@ const CONTRACT_VERSION: &str = env!("CARGO_PKG_VERSION");
 
 const MAX_YEAR_REGISTER: u8 = 5;
 
-use crate::msg::{ExecuteMsg, InstantiateMsg, MigrateMsg, QueryMsg, VerifyMsg};
+use crate::msg::{ExecuteMsg, InstantiateMsg, MigrateMsg, PricesResponse, QueryMsg, VerifyMsg};
 
 /// Handling contract instantiation
 #[cfg_attr(not(feature = "library"), entry_point)]
@@ -141,10 +142,13 @@ fn execute_extend_expires(
     info: MessageInfo,
     name: String,
     backend_signature: Binary,
-    old_expires: Timestamp,
-    new_expires: Timestamp,
+    old_expires: u64,
+    new_expires: u64,
 ) -> Result<Response, ContractError> {
-    let years = years_from_expires(&old_expires, &new_expires);
+    let years = years_from_expires(
+        &Timestamp::from_seconds(old_expires),
+        &Timestamp::from_seconds(new_expires),
+    );
     if years > MAX_YEAR_REGISTER as u64 {
         return Err(ContractError::InvalidYearRegister);
     }
@@ -160,8 +164,8 @@ fn execute_extend_expires(
             name: name.clone(),
             sender: info.sender.to_string(),
             chain_id: env.block.chain_id,
-            old_expires: old_expires.clone().seconds(),
-            new_expires: new_expires.clone().seconds(),
+            old_expires: old_expires,
+            new_expires: new_expires,
         };
         let verify_msg_str =
             serde_json_wasm::to_string(&verify_msg).map_err(|_| ContractError::SerdeError)?;
@@ -178,7 +182,7 @@ fn execute_extend_expires(
     let name_contract = NAME_CONTRACT.load(deps.storage)?;
     let msg = aurans_name::ExecuteMsg::Extension {
         msg: aurans_name::NameExecuteMsg::ExtendExpires {
-            token_id: format!("{}@{}", name.clone(), old_expires.seconds()),
+            token_id: format!("{}@{}", name.clone(), old_expires),
             new_expires: new_expires,
         },
     };
@@ -207,6 +211,13 @@ fn execute_register(
         return Err(ContractError::InvalidYearRegister);
     }
 
+    let expires = metadata.expires;
+    if expires <= env.block.time.seconds() {
+        return Err(ContractError::InvalidTimestamp {
+            blocktime: env.block.time.seconds().to_string(),
+        });
+    }
+
     // Check fee
     let fee = calc_price(deps.as_ref(), &name, &years)?;
     check_fee(fee, &info.funds)?;
@@ -221,7 +232,7 @@ fn execute_register(
             sender: info.sender.to_string(),
             chain_id: env.block.chain_id,
             bech32_prefixes: bech32_prefixes.clone(),
-            expires: expires.clone().seconds(),
+            expires: expires,
         };
         let verify_msg_str =
             serde_json_wasm::to_string(&verify_msg).map_err(|_| ContractError::SerdeError)?;
@@ -238,10 +249,11 @@ fn execute_register(
 
     // Call mint msg
     let name_contract = NAME_CONTRACT.load(deps.storage)?;
+    let token_id = join_name_and_expires(&name, expires);
     let mint_msg = WasmMsg::Execute {
         contract_addr: name_contract.to_string(),
         msg: to_binary(&aurans_name::ExecuteMsg::Mint {
-            token_id: name.clone(),
+            token_id,
             owner: info.sender.to_string(),
             token_uri: None,
             extension: Metadata {
@@ -362,11 +374,32 @@ fn execute_update_config(
 pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<Binary> {
     match msg {
         QueryMsg::Config {} => to_binary(&query_config(deps)?),
+        QueryMsg::Verifier {} => to_binary(&query_verifier(deps)?),
+        QueryMsg::Prices {} => to_binary(&query_prices(deps)?),
+        QueryMsg::NameContract {} => to_binary(&query_name_contract(deps)?),
     }
 }
 
 fn query_config(deps: Deps) -> StdResult<Config> {
     CONFIG.load(deps.storage)
+}
+
+fn query_verifier(deps: Deps) -> StdResult<Verifier> {
+    VERIFIER.load(deps.storage)
+}
+
+fn query_prices(deps: Deps) -> StdResult<PricesResponse> {
+    let prices_res: StdResult<Vec<_>> = PRICE_INFO
+        .range(deps.storage, None, None, Order::Ascending)
+        .collect();
+    match prices_res {
+        Ok(prices) => Ok(PricesResponse { prices: prices }),
+        Err(_) => Ok(PricesResponse { prices: vec![] }),
+    }
+}
+
+fn query_name_contract(deps: Deps) -> StdResult<Addr> {
+    NAME_CONTRACT.load(deps.storage)
 }
 
 #[cfg_attr(not(feature = "library"), entry_point)]

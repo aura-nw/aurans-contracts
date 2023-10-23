@@ -98,6 +98,13 @@ pub mod env {
                     admin: ADMIN.to_string(),
                     prices: vec![
                         (
+                            0,
+                            Coin {
+                                denom: NATIVE_DENOM.to_string(),
+                                amount: Uint128::from(BASE_PRICE),
+                            },
+                        ),
+                        (
                             1,
                             Coin {
                                 denom: NATIVE_DENOM.to_string(),
@@ -129,7 +136,7 @@ pub mod env {
                             5,
                             Coin {
                                 denom: NATIVE_DENOM.to_string(),
-                                amount: Uint128::from(BASE_PRICE),
+                                amount: Uint128::from(BASE_PRICE * 5),
                             },
                         ),
                     ],

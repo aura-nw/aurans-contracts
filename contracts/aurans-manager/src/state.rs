@@ -16,13 +16,17 @@ pub struct Verifier {
 }
 
 pub const CONFIG: Item<Config> = Item::new("config");
+// PRICE_INFO has keys are length of name.
+// The value of key is zero meaning other length of name not in config
 pub const PRICE_INFO: Map<u8, Coin> = Map::new("price_info");
 pub const VERIFIER: Item<Verifier> = Item::new("verify");
 pub const NAME_CONTRACT: Item<Addr> = Item::new("name_contract");
 
+// 365 days
+pub const SEC_PER_YEAR: u64 = 31536000;
+
 pub fn years_from_expires(old: &Timestamp, new: &Timestamp) -> u64 {
-    // 365 days
-    new.minus_seconds(old.seconds()).seconds() / 31536000
+    new.minus_seconds(old.seconds()).seconds() / SEC_PER_YEAR
 }
 
 #[cfg(test)]

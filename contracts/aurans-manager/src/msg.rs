@@ -1,8 +1,8 @@
 use aurans_name::state::Metadata;
 use cosmwasm_schema::{cw_serde, QueryResponses};
-use cosmwasm_std::{Binary, Coin, Timestamp};
+use cosmwasm_std::{Addr, Binary, Coin};
 
-use crate::state::Config;
+use crate::state::{Config, Verifier};
 
 /// Message type for `instantiate` entry_point
 #[cw_serde]
@@ -36,8 +36,8 @@ pub enum ExecuteMsg {
     ExtendExpires {
         name: String,
         backend_signature: Binary,
-        old_expires: Timestamp,
-        new_expires: Timestamp,
+        old_expires: u64,
+        new_expires: u64,
     },
 }
 
@@ -51,6 +51,17 @@ pub enum MigrateMsg {}
 pub enum QueryMsg {
     #[returns(Config)]
     Config {},
+    #[returns(Verifier)]
+    Verifier {},
+    #[returns(PricesResponse)]
+    Prices {},
+    #[returns(Addr)]
+    NameContract {},
+}
+
+#[cw_serde]
+pub struct PricesResponse {
+    pub prices: Vec<(u8, Coin)>,
 }
 
 #[cw_serde]

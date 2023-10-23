@@ -2,7 +2,7 @@
 use cosmwasm_std::entry_point;
 use cosmwasm_std::{
     to_binary, Binary, CosmosMsg, Deps, DepsMut, Empty, Env, MessageInfo, Reply, ReplyOn, Response,
-    StdResult, SubMsg, Timestamp, WasmMsg,
+    StdResult, SubMsg, WasmMsg,
 };
 use cw2::set_contract_version;
 use cw721::{ContractInfoResponse, Cw721ReceiveMsg};
@@ -310,7 +310,7 @@ fn execute_extend_expires(
     _env: Env,
     info: MessageInfo,
     token_id: String,
-    new_expires: Timestamp,
+    new_expires: u64,
 ) -> Result<Response, ContractError> {
     let name_cw721 = NameCw721::default();
     let mut old_token = name_cw721.tokens.load(deps.storage, &token_id)?;
@@ -331,7 +331,7 @@ fn execute_extend_expires(
 
     // Mint new token
     let (name, _) = extract_name_from_token_id(token_id.as_ref())?;
-    let new_token_id = format!("{}@{}", name, new_expires.seconds());
+    let new_token_id = format!("{}@{}", name, new_expires);
     name_cw721.mint(
         deps,
         info.clone(),

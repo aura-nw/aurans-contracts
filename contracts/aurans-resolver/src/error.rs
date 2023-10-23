@@ -14,4 +14,7 @@ pub enum ContractError {
 
     #[error("Already registered")]
     UserRegistered {},
+
+    #[error("Bech32 decode error")]
+    Bech32DecodeError {},
 }

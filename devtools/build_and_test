@@ -16,7 +16,7 @@
 set -euo pipefail
 
 function exists() {
-  command -v "$1" &> /dev/null
+  command -v "$1" &>/dev/null
 }
 
 function cmd_fmt() {
@@ -25,9 +25,9 @@ function cmd_fmt() {
 
 function cmd_build() {
   docker run --rm -v "$(pwd)":/code \
-  --mount type=volume,source="$(basename "$(pwd)")_cache",target=/code/target \
-  --mount type=volume,source=registry_cache,target=/usr/local/cargo/registry \
-  cosmwasm/workspace-optimizer:0.13.0
+    --mount type=volume,source="$(basename "$(pwd)")_cache",target=/code/target \
+    --mount type=volume,source=registry_cache,target=/usr/local/cargo/registry \
+    cosmwasm/workspace-optimizer:0.13.0
 }
 
 function cmd_check() {

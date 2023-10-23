@@ -35,4 +35,7 @@ pub enum ContractError {
 
     #[error("Invalid Year Register")]
     InvalidYearRegister,
+
+    #[error("Invalid Timestamp blocktime: {blocktime:?}")]
+    InvalidTimestamp { blocktime: String },
 }

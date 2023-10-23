@@ -1,5 +1,5 @@
 use cosmwasm_schema::{cw_serde, QueryResponses};
-use cosmwasm_std::{CustomMsg, Timestamp};
+use cosmwasm_std::CustomMsg;
 
 use crate::state::{Config, Metadata};
 
@@ -28,7 +28,7 @@ pub enum NameExecuteMsg {
     },
     ExtendExpires {
         token_id: String,
-        new_expires: Timestamp,
+        new_expires: u64,
     },
     EvictBatch {
         // Should be limit batch size

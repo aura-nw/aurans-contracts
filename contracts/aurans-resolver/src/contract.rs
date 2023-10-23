@@ -5,6 +5,7 @@ use cosmwasm_std::{
 };
 use cw2::set_contract_version;
 use cw_storage_plus::Bound;
+use cw_storage_plus::KeyDeserialize;
 
 use crate::error::ContractError;
 use crate::state::{records, Config, CONFIG, NAME_CONTRACT};
@@ -12,6 +13,7 @@ use crate::state::{records, Config, CONFIG, NAME_CONTRACT};
 use crate::msg::{
     AddressResponse, ExecuteMsg, InstantiateMsg, MigrateMsg, NamesResponse, QueryMsg,
 };
+use crate::util;
 
 // version info for migration info
 const CONTRACT_NAME: &str = "crates.io:aurans-resolver";
@@ -35,6 +37,8 @@ pub fn instantiate(
         admin: deps.api.addr_validate(&msg.admin)?,
     };
     CONFIG.save(deps.storage, &config)?;
+
+    NAME_CONTRACT.save(deps.storage, &info.sender)?;
 
     Ok(Response::new()
         .add_attribute("action", "instantiate")
@@ -155,13 +159,15 @@ fn execute_update_record(
     can_execute(deps.as_ref(), &config, &info.sender)?;
 
     for bech32_prefix in &bech32_prefixes {
-        records().save(deps.storage, (&name, &bech32_prefix), &address)?;
+        let bech32_addr_decoded = util::bech32_decode(&address)?;
+        let bech32_addr = util::bech32_encode(bech32_prefix, &bech32_addr_decoded);
+        records().save(deps.storage, (&name, &bech32_prefix), &bech32_addr)?;
     }
     Ok(Response::new()
         .add_attribute("action", "update_record")
         .add_attribute("name", &name)
         .add_attribute(
-            "list_bech32_prefix",
+            "bech32_prefixes",
             &bech32_prefixes.into_iter().collect::<String>(),
         )
         .add_attribute("address", &address))
@@ -184,7 +190,7 @@ fn execute_delete_record(
         .add_attribute("action", "delete_record")
         .add_attribute("name", &name)
         .add_attribute(
-            "list_bech32_prefix",
+            "bech32_prefixes",
             &bech32_prefixes.into_iter().collect::<String>(),
         ))
 }
@@ -270,6 +276,15 @@ fn query_names(
         .prefix(owner)
         .keys(deps.storage, start, None, Order::Ascending)
         .take(limit)
+        .map(|result| {
+            result
+                .iter()
+                .map(|key| {
+                    let (name, bech32_prefix) = <(String, String)>::from_slice(key.as_bytes())?;
+                    Ok(format!("{}.{}", name, bech32_prefix))
+                })
+                .collect::<StdResult<String>>()
+        })
         .collect::<StdResult<Vec<_>>>()?;
     Ok(NamesResponse { names })
 }
