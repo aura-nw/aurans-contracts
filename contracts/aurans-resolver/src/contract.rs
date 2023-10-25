@@ -70,10 +70,6 @@ pub fn execute(
             bech32_prefixes,
             address,
         } => execute_update_record(deps, env, info, name, bech32_prefixes, address),
-        ExecuteMsg::DeleteRecord {
-            name,
-            bech32_prefixes,
-        } => execute_delete_record(deps, env, info, name, bech32_prefixes),
         ExecuteMsg::UpdateNameContract { name_contract } => {
             execute_update_name_contract(deps, env, info, name_contract)
         }
@@ -166,33 +162,8 @@ fn execute_update_record(
     Ok(Response::new()
         .add_attribute("action", "update_record")
         .add_attribute("name", &name)
-        .add_attribute(
-            "bech32_prefixes",
-            &bech32_prefixes.into_iter().collect::<String>(),
-        )
+        .add_attribute("bech32_prefixes", &bech32_prefixes.join(","))
         .add_attribute("address", &address))
-}
-
-fn execute_delete_record(
-    deps: DepsMut,
-    _env: Env,
-    info: MessageInfo,
-    name: String,
-    bech32_prefixes: Vec<String>,
-) -> Result<Response, ContractError> {
-    let config = CONFIG.load(deps.storage)?;
-    can_execute(deps.as_ref(), &config, &info.sender)?;
-
-    for bech32_prefix in &bech32_prefixes {
-        records().remove(deps.storage, (&name, &bech32_prefix))?;
-    }
-    Ok(Response::new()
-        .add_attribute("action", "delete_record")
-        .add_attribute("name", &name)
-        .add_attribute(
-            "bech32_prefixes",
-            &bech32_prefixes.into_iter().collect::<String>(),
-        ))
 }
 
 fn execute_delete_names(
@@ -209,8 +180,8 @@ fn execute_delete_names(
     }
 
     Ok(Response::new()
-        .add_attribute("action", "delete_batch_record")
-        .add_attribute("names", names.into_iter().collect::<String>()))
+        .add_attribute("action", "delete_names")
+        .add_attribute("names", names.join(",")))
 }
 
 fn query_config(deps: Deps) -> StdResult<Config> {
@@ -227,10 +198,10 @@ fn query_address_of(
     bech32_prefix: String,
 ) -> StdResult<AddressResponse> {
     let key = (primary_name.as_ref(), bech32_prefix.as_ref());
-    let addr = records().load(deps.storage, key)?;
+    let address = records().load(deps.storage, key)?;
     Ok(AddressResponse {
-        address: addr,
-        bech32_prefix: bech32_prefix,
+        address,
+        bech32_prefix,
     })
 }
 
@@ -252,9 +223,10 @@ fn query_all_addresses_of(
         .collect::<StdResult<Vec<_>>>()?;
 
     for record in records {
+        let (bech32_prefix, address) = record;
         addresses.push(AddressResponse {
-            address: record.0,
-            bech32_prefix: record.1,
+            address,
+            bech32_prefix,
         });
     }
 

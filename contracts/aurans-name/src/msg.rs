@@ -1,7 +1,7 @@
 use cosmwasm_schema::{cw_serde, QueryResponses};
 use cosmwasm_std::CustomMsg;
 
-use crate::state::{Config, Metadata};
+use crate::state::{Config, Metadata, Resolver};
 
 /// Message type for `instantiate` entry_point
 #[cw_serde]
@@ -22,15 +22,12 @@ pub type ExecuteMsg = cw721_base::ExecuteMsg<Metadata, NameExecuteMsg>;
 pub enum NameExecuteMsg {
     UpdateConfig {
         admin: String,
+        minter: String,
     },
     UpdateResolver {
         resolver: String,
     },
-    ExtendExpires {
-        token_id: String,
-        new_expires: u64,
-    },
-    EvictBatch {
+    BurnBatch {
         // Should be limit batch size
         token_ids: Vec<String>,
     },
@@ -44,6 +41,9 @@ pub type QueryMsg = cw721_base::QueryMsg<NameQueryMsg>;
 pub enum NameQueryMsg {
     #[returns(Config)]
     Config {},
+
+    #[returns(Resolver)]
+    Resolver {},
 }
 
 impl CustomMsg for NameExecuteMsg {}

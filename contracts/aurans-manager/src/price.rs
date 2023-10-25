@@ -20,7 +20,7 @@ pub fn calc_price(deps: Deps, name: &str, years: &u8) -> Result<Coin, ContractEr
 pub fn check_fee(price: Coin, funds: &Vec<Coin>) -> Result<(), ContractError> {
     if funds
         .into_iter()
-        .any(|fund| fund.denom == price.denom && fund.amount > price.amount)
+        .any(|fund| fund.denom == price.denom && fund.amount >= price.amount)
     {
         Ok(())
     } else {

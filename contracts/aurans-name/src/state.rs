@@ -41,6 +41,7 @@ pub struct Metadata {
 #[cw_serde]
 pub struct Config {
     pub admin: Addr,
+    pub minter: Addr,
 }
 
 #[cw_serde]

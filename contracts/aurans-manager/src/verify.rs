@@ -50,9 +50,9 @@ pub mod tests {
         assert_eq!(binary, binary_again);
 
         let register_msg = VerifyMsg::Register {
-            name: "tiennv".to_owned(),
+            name: "tiennv3".to_owned(),
             sender: "aura1evlaf7aqc4tuz5vwy4gkmtzrg320l3r77cgr2n".to_owned(),
-            chain_id: "aura-local".to_owned(),
+            chain_id: "euphoria-2".to_owned(),
             bech32_prefixes: vec![
                 // "sei".to_owned(),
                 "aura".to_owned(),
