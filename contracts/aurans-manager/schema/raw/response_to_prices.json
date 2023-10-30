@@ -1,33 +1,11 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "title": "InstantiateMsg",
-  "description": "Message type for `instantiate` entry_point",
+  "title": "PricesResponse",
   "type": "object",
   "required": [
-    "admin",
-    "backend_pubkey",
-    "max_year_register",
-    "name_code_id",
-    "prices",
-    "resolver_code_id"
+    "prices"
   ],
   "properties": {
-    "admin": {
-      "type": "string"
-    },
-    "backend_pubkey": {
-      "$ref": "#/definitions/Binary"
-    },
-    "max_year_register": {
-      "type": "integer",
-      "format": "uint64",
-      "minimum": 0.0
-    },
-    "name_code_id": {
-      "type": "integer",
-      "format": "uint64",
-      "minimum": 0.0
-    },
     "prices": {
       "type": "array",
       "items": {
@@ -45,19 +23,10 @@
         "maxItems": 2,
         "minItems": 2
       }
-    },
-    "resolver_code_id": {
-      "type": "integer",
-      "format": "uint64",
-      "minimum": 0.0
     }
   },
   "additionalProperties": false,
   "definitions": {
-    "Binary": {
-      "description": "Binary is a wrapper around Vec<u8> to add base64 de/serialization with serde. It also adds some helper methods to help encode inline.\n\nThis is only needed as serde-json-{core,wasm} has a horrible encoding for Vec<u8>. See also <https://github.com/CosmWasm/cosmwasm/blob/main/docs/MESSAGE_TYPES.md>.",
-      "type": "string"
-    },
     "Coin": {
       "type": "object",
       "required": [

@@ -4,12 +4,18 @@
   "type": "object",
   "required": [
     "admin",
+    "max_year_register",
     "name_code_id",
     "resolver_code_id"
   ],
   "properties": {
     "admin": {
       "$ref": "#/definitions/Addr"
+    },
+    "max_year_register": {
+      "type": "integer",
+      "format": "uint64",
+      "minimum": 0.0
     },
     "name_code_id": {
       "type": "integer",

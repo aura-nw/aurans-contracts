@@ -80,34 +80,6 @@
     {
       "type": "object",
       "required": [
-        "delete_record"
-      ],
-      "properties": {
-        "delete_record": {
-          "type": "object",
-          "required": [
-            "bech32_prefixes",
-            "name"
-          ],
-          "properties": {
-            "bech32_prefixes": {
-              "type": "array",
-              "items": {
-                "type": "string"
-              }
-            },
-            "name": {
-              "type": "string"
-            }
-          },
-          "additionalProperties": false
-        }
-      },
-      "additionalProperties": false
-    },
-    {
-      "type": "object",
-      "required": [
         "delete_names"
       ],
       "properties": {

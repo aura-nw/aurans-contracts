@@ -25,7 +25,7 @@ pub mod tests {
     use cosmwasm_crypto::secp256k1_verify;
     use cosmwasm_std::Binary;
 
-    use crate::msg::VerifyMsg;
+    use crate::{msg::VerifyMsg, util::year_to_second};
 
     fn from_mnemonic(phrase: &str, derivation_path: &str) -> SigningKey {
         let seed = bip32::Mnemonic::new(phrase, bip32::Language::English)
@@ -49,17 +49,15 @@ pub mod tests {
 
         assert_eq!(binary, binary_again);
 
+        let one_year = year_to_second(1);
+        println!("expries={:?}", one_year);
+
         let register_msg = VerifyMsg::Register {
-            name: "tiennv3".to_owned(),
-            sender: "aura1evlaf7aqc4tuz5vwy4gkmtzrg320l3r77cgr2n".to_owned(),
-            chain_id: "euphoria-2".to_owned(),
-            bech32_prefixes: vec![
-                // "sei".to_owned(),
-                "aura".to_owned(),
-                "cosmos".to_owned(),
-                // "osmo".to_owned(),
-            ],
-            expires: 1729331450,
+            name: "tiennv".to_owned(),
+            sender: "aura1yntfxtwysmgjp6wzza590xctjpzne3ak9scynv".to_owned(),
+            chain_id: "aura-local".to_owned(),
+            bech32_prefixes: vec!["aura".to_owned(), "cosmos".to_owned()],
+            expires: one_year,
         };
 
         let register_msg_json = serde_json_wasm::to_string(&register_msg).unwrap();
@@ -79,10 +77,9 @@ pub mod tests {
 
         let extend_msg = VerifyMsg::ExtendExpires {
             name: "tiennv".to_owned(),
-            sender: "aura1evlaf7aqc4tuz5vwy4gkmtzrg320l3r77cgr2n".to_string(),
+            sender: "aura1yntfxtwysmgjp6wzza590xctjpzne3ak9scynv".to_string(),
             chain_id: "aura-local".to_owned(),
-            old_expires: 1729331450,
-            new_expires: 1729666324,
+            extends: one_year,
         };
 
         let extend_msg_json = serde_json_wasm::to_string(&extend_msg).unwrap();

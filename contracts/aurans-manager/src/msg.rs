@@ -12,6 +12,7 @@ pub struct InstantiateMsg {
     pub backend_pubkey: Binary,
     pub name_code_id: u64,
     pub resolver_code_id: u64,
+    pub max_year_register: u64,
 }
 
 /// Message type for `execute` entry_point
@@ -21,6 +22,7 @@ pub enum ExecuteMsg {
         admin: String,
         name_code_id: u64,
         resolver_code_id: u64,
+        max_year_register: u64,
     },
     UpdatePrices {
         prices: Vec<(u8, Coin)>,
@@ -36,8 +38,7 @@ pub enum ExecuteMsg {
     ExtendExpires {
         name: String,
         backend_signature: Binary,
-        old_expires: u64,
-        new_expires: u64,
+        extends: u64,
     },
 }
 
@@ -77,7 +78,6 @@ pub enum VerifyMsg {
         name: String,
         sender: String,
         chain_id: String,
-        old_expires: u64,
-        new_expires: u64,
+        extends: u64,
     },
 }

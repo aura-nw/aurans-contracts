@@ -156,9 +156,11 @@ fn execute_burn(
     token_id: String,
 ) -> Result<Response, ContractError> {
     // Require sender is minter or admin
-    let config = CONFIG.load(deps.storage)?;
-    if info.sender != config.admin || info.sender != config.minter {
-        return Err(ContractError::Unauthorized {});
+    let config: Config = CONFIG.load(deps.storage)?;
+    if info.sender != config.admin && info.sender != config.minter {
+        return Err(ContractError::Unauthorized {
+            sender: info.sender.clone().to_string(),
+        });
     }
 
     let name_cw721 = NameCw721::default();
@@ -314,7 +316,9 @@ fn execute_update_resolver(
     // only contract admin can update resolver
     let config = CONFIG.load(deps.storage)?;
     if config.admin != info.sender {
-        return Err(ContractError::Unauthorized {});
+        return Err(ContractError::Unauthorized {
+            sender: info.sender.clone().to_string(),
+        });
     }
 
     let r = Resolver {
@@ -337,7 +341,9 @@ fn execute_update_config(
     // only contract admin can update config
     let config = CONFIG.load(deps.storage)?;
     if config.admin != info.sender {
-        return Err(ContractError::Unauthorized {});
+        return Err(ContractError::Unauthorized {
+            sender: info.sender.clone().to_string(),
+        });
     }
 
     // update config
@@ -365,7 +371,9 @@ fn execute_burn_batch(
     }
     let config = CONFIG.load(deps.storage)?;
     if config.admin != info.sender {
-        return Err(ContractError::Unauthorized {});
+        return Err(ContractError::Unauthorized {
+            sender: info.sender.clone().to_string(),
+        });
     }
 
     let name_cw721 = NameCw721::default();

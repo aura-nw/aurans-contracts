@@ -384,8 +384,7 @@
       "type": "object",
       "required": [
         "bech32_prefixes",
-        "expires",
-        "years"
+        "expires"
       ],
       "properties": {
         "animation_url": {
@@ -422,7 +421,9 @@
           ]
         },
         "expires": {
-          "$ref": "#/definitions/Timestamp"
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0.0
         },
         "external_url": {
           "type": [
@@ -464,11 +465,6 @@
           "format": "uint64",
           "minimum": 0.0
         },
-        "years": {
-          "type": "integer",
-          "format": "uint8",
-          "minimum": 0.0
-        },
         "youtube_url": {
           "type": [
             "string",
@@ -489,10 +485,14 @@
             "update_config": {
               "type": "object",
               "required": [
-                "admin"
+                "admin",
+                "minter"
               ],
               "properties": {
                 "admin": {
+                  "type": "string"
+                },
+                "minter": {
                   "type": "string"
                 }
               },
@@ -525,35 +525,10 @@
         {
           "type": "object",
           "required": [
-            "extend_expires"
+            "burn_batch"
           ],
           "properties": {
-            "extend_expires": {
-              "type": "object",
-              "required": [
-                "new_expires",
-                "token_id"
-              ],
-              "properties": {
-                "new_expires": {
-                  "$ref": "#/definitions/Timestamp"
-                },
-                "token_id": {
-                  "type": "string"
-                }
-              },
-              "additionalProperties": false
-            }
-          },
-          "additionalProperties": false
-        },
-        {
-          "type": "object",
-          "required": [
-            "evict_batch"
-          ],
-          "properties": {
-            "evict_batch": {
+            "burn_batch": {
               "type": "object",
               "required": [
                 "token_ids"

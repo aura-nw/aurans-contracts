@@ -2,7 +2,7 @@
 use cosmwasm_std::entry_point;
 use cosmwasm_std::{
     to_binary, Addr, Binary, Coin, CosmosMsg, Deps, DepsMut, Env, MessageInfo, Order, QueryRequest,
-    Reply, ReplyOn, Response, StdResult, SubMsg, Timestamp, WasmMsg, WasmQuery,
+    Reply, ReplyOn, Response, StdResult, SubMsg, WasmMsg, WasmQuery,
 };
 use cw2::set_contract_version;
 use cw721::NftInfoResponse;
@@ -10,10 +10,9 @@ use cw_utils::parse_reply_instantiate_data;
 
 use crate::error::ContractError;
 use crate::price::{calc_price, check_fee};
-use crate::state::{
-    years_from_expires, Config, Verifier, CONFIG, NAME_CONTRACT, PRICE_INFO, VERIFIER,
-};
+use crate::state::{Config, Verifier, CONFIG, NAME_CONTRACT, PRICE_INFO, REGISTERS, VERIFIER};
 
+use crate::util::second_to_year;
 use crate::verify::verify_signature;
 use aurans_name::state::Metadata;
 use aurans_name::util::join_name_and_expires;
@@ -21,8 +20,6 @@ use aurans_name::util::join_name_and_expires;
 // version info for migration info
 const CONTRACT_NAME: &str = "crates.io:aurans-manager";
 const CONTRACT_VERSION: &str = env!("CARGO_PKG_VERSION");
-
-const MAX_YEAR_REGISTER: u8 = 5;
 
 use crate::msg::{ExecuteMsg, InstantiateMsg, MigrateMsg, PricesResponse, QueryMsg, VerifyMsg};
 
@@ -39,8 +36,9 @@ pub fn instantiate(
     // save contract config
     let config = Config {
         admin: deps.api.addr_validate(&msg.admin)?,
-        name_code_id: msg.name_code_id.clone(),
-        resolver_code_id: msg.resolver_code_id.clone(),
+        name_code_id: msg.name_code_id,
+        resolver_code_id: msg.resolver_code_id,
+        max_year_register: msg.max_year_register,
     };
     CONFIG.save(deps.storage, &config)?;
 
@@ -78,6 +76,7 @@ pub fn instantiate(
         .add_attribute("backend_pubkey", msg.backend_pubkey.to_string())
         .add_attribute("name_code_id", msg.name_code_id.to_string())
         .add_attribute("resolver_code_id", msg.resolver_code_id.to_string())
+        .add_attribute("max_year_register", msg.max_year_register.to_string())
         .add_attribute(
             "prices",
             msg.prices
@@ -105,13 +104,21 @@ pub fn execute(
     info: MessageInfo,
     msg: ExecuteMsg,
 ) -> Result<Response, ContractError> {
-    let _api = deps.api;
     match msg {
         ExecuteMsg::UpdateConfig {
             admin,
             name_code_id,
             resolver_code_id,
-        } => execute_update_config(deps, env, info, admin, name_code_id, resolver_code_id),
+            max_year_register,
+        } => execute_update_config(
+            deps,
+            env,
+            info,
+            admin,
+            name_code_id,
+            resolver_code_id,
+            max_year_register,
+        ),
         ExecuteMsg::UpdatePrices { prices } => execute_update_prices(deps, env, info, prices),
         ExecuteMsg::UpdateVerifier { backend_pubkey } => {
             execute_update_verifier(deps, env, info, backend_pubkey)
@@ -124,17 +131,8 @@ pub fn execute(
         ExecuteMsg::ExtendExpires {
             name,
             backend_signature,
-            old_expires,
-            new_expires,
-        } => execute_extend_expires(
-            deps,
-            env,
-            info,
-            name,
-            backend_signature,
-            old_expires,
-            new_expires,
-        ),
+            extends,
+        } => execute_extend_expires(deps, env, info, name, backend_signature, extends),
     }
 }
 
@@ -144,30 +142,30 @@ fn execute_extend_expires(
     info: MessageInfo,
     name: String,
     backend_signature: Binary,
-    old_expires: u64,
-    new_expires: u64,
+    extends: u64,
 ) -> Result<Response, ContractError> {
-    let years = years_from_expires(
-        &Timestamp::from_seconds(old_expires),
-        &Timestamp::from_seconds(new_expires),
-    );
-    if years > MAX_YEAR_REGISTER as u64 {
-        return Err(ContractError::InvalidYearRegister);
+    let old_expires = REGISTERS
+        .load(deps.storage, &name)
+        .map_err(|_| ContractError::NameNotRegisted { name: name.clone() })?;
+
+    let config = CONFIG.load(deps.storage)?;
+
+    let years = second_to_year(extends);
+    if years > config.max_year_register as u64 {
+        return Err(ContractError::LimitYearRegister);
     }
 
     // Check user funds
-    let fee = calc_price(deps.as_ref(), &name, &(years as u8))?;
+    let fee = calc_price(deps.as_ref(), &name, &years)?;
     check_fee(fee, &info.funds)?;
 
-    let config = CONFIG.load(deps.storage)?;
     // If not owner, check verification msg
     if config.admin != info.sender {
         let verify_msg = VerifyMsg::ExtendExpires {
             name: name.clone(),
             sender: info.sender.to_string(),
             chain_id: env.block.chain_id,
-            old_expires: old_expires,
-            new_expires: new_expires,
+            extends,
         };
         let verify_msg_str =
             serde_json_wasm::to_string(&verify_msg).map_err(|_| ContractError::SerdeError)?;
@@ -184,6 +182,7 @@ fn execute_extend_expires(
     // Get name contract
     let name_contract = NAME_CONTRACT.load(deps.storage)?;
     let old_token_id = join_name_and_expires(&name, old_expires);
+    let new_expires = old_expires + extends;
     let new_token_id = join_name_and_expires(&name, new_expires);
 
     let old_token: NftInfoResponse<Metadata> =
@@ -215,13 +214,15 @@ fn execute_extend_expires(
         funds: vec![],
     };
 
+    REGISTERS.save(deps.storage, &name, &new_expires)?;
+
     Ok(Response::new()
         .add_message(burn_msg)
         .add_message(mint_msg)
         .add_attribute("action", "extend_expires")
         .add_attribute("name", name)
-        .add_attribute("old_expires", old_expires.to_string())
-        .add_attribute("new_expires", new_expires.to_string()))
+        .add_attribute("new_expires", new_expires.to_string())
+        .add_attribute("extends", extends.to_string()))
 }
 
 fn execute_register(
@@ -232,23 +233,27 @@ fn execute_register(
     backend_signature: Binary,
     metadata: Metadata,
 ) -> Result<Response, ContractError> {
-    let years = metadata.years;
-    if years > MAX_YEAR_REGISTER {
-        return Err(ContractError::InvalidYearRegister);
-    }
-
-    let expires = metadata.expires;
-    if expires <= env.block.time.seconds() {
-        return Err(ContractError::InvalidTimestamp {
-            blocktime: env.block.time.seconds().to_string(),
+    // Check name is registed or not
+    if REGISTERS.has(deps.storage, &name) {
+        return Err(ContractError::NameRegisted {
+            name: name.to_owned(),
         });
     }
+
+    let config = CONFIG.load(deps.storage)?;
+    let expires = metadata.expires;
+    let years = second_to_year(expires);
+    if years > config.max_year_register {
+        return Err(ContractError::LimitYearRegister);
+    }
+
+    let register_secs = env.block.time.seconds();
+    let expires_secs = register_secs + expires;
 
     // Check fee
     let fee = calc_price(deps.as_ref(), &name, &years)?;
     check_fee(fee, &info.funds)?;
 
-    let config = CONFIG.load(deps.storage)?;
     let bech32_prefixes = metadata.bech32_prefixes;
     let expires = metadata.expires;
     // If not owner, check verification msg
@@ -258,7 +263,7 @@ fn execute_register(
             sender: info.sender.to_string(),
             chain_id: env.block.chain_id,
             bech32_prefixes: bech32_prefixes.clone(),
-            expires: expires,
+            expires: expires_secs,
         };
         let verify_msg_str =
             serde_json_wasm::to_string(&verify_msg).map_err(|_| ContractError::SerdeError)?;
@@ -273,9 +278,12 @@ fn execute_register(
         )?;
     }
 
+    REGISTERS.save(deps.storage, &name, &expires_secs)?;
+
     // Call mint msg
     let name_contract = NAME_CONTRACT.load(deps.storage)?;
-    let token_id = join_name_and_expires(&name, expires);
+    let token_id = join_name_and_expires(&name, expires_secs);
+
     let mint_msg = WasmMsg::Execute {
         contract_addr: name_contract.to_string(),
         msg: to_binary(&aurans_name::ExecuteMsg::Mint {
@@ -296,7 +304,6 @@ fn execute_register(
                 royalty_payment_address: metadata.royalty_payment_address,
                 bech32_prefixes: bech32_prefixes.clone(),
                 expires: expires.clone(),
-                years: years.clone(),
             },
         })?,
         funds: vec![],
@@ -307,7 +314,9 @@ fn execute_register(
         .add_attribute("action", "register")
         .add_attribute("name", name)
         .add_attribute("bech32_prefixes", bech32_prefixes.join(","))
-        .add_attribute("years", years.to_string())
+        .add_attribute("expires", expires.to_string())
+        .add_attribute("register_at", register_secs.to_string())
+        .add_attribute("expires_at", expires_secs.to_string())
         .add_attribute("backend_signature", backend_signature.to_string()))
 }
 
@@ -374,6 +383,7 @@ fn execute_update_config(
     admin: String,
     name_code_id: u64,
     resolver_code_id: u64,
+    max_year_register: u64,
 ) -> Result<Response, ContractError> {
     // only contract admin can update config
     let config = CONFIG.load(deps.storage)?;
@@ -386,6 +396,7 @@ fn execute_update_config(
         admin: deps.api.addr_validate(&admin)?,
         name_code_id,
         resolver_code_id,
+        max_year_register,
     };
     CONFIG.save(deps.storage, &new_config)?;
 
@@ -393,7 +404,8 @@ fn execute_update_config(
         .add_attribute("action", "update_config")
         .add_attribute("admin", admin.to_string())
         .add_attribute("name_code_id", name_code_id.to_string())
-        .add_attribute("resolver_code_id", resolver_code_id.to_string()))
+        .add_attribute("resolver_code_id", resolver_code_id.to_string())
+        .add_attribute("max_year_register", max_year_register.to_string()))
 }
 
 #[cfg_attr(not(feature = "library"), entry_point)]
