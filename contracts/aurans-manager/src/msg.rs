@@ -40,6 +40,9 @@ pub enum ExecuteMsg {
         backend_signature: Binary,
         extends: u64,
     },
+    Unregister {
+        names: Vec<String>,
+    },
 }
 
 /// Message type for `migrate` entry_point

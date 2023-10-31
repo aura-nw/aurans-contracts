@@ -129,8 +129,8 @@ pub fn execute(
             NameExecuteMsg::UpdateConfig { admin, minter } => {
                 execute_update_config(deps, env, info, admin, minter)
             }
-            NameExecuteMsg::BurnBatch { token_ids } => {
-                execute_burn_batch(deps, env, info, token_ids)
+            NameExecuteMsg::BurnTokens { token_ids } => {
+                execute_burn_tokens(deps, env, info, token_ids)
             }
             NameExecuteMsg::UpdateResolver { resolver } => {
                 execute_update_resolver(deps, env, info, resolver)
@@ -360,7 +360,7 @@ fn execute_update_config(
 }
 
 // REQUIRED: sender must be admin
-fn execute_burn_batch(
+fn execute_burn_tokens(
     deps: DepsMut,
     _env: Env,
     info: MessageInfo,
@@ -370,7 +370,7 @@ fn execute_burn_batch(
         return Err(ContractError::BatchTooLong {});
     }
     let config = CONFIG.load(deps.storage)?;
-    if config.admin != info.sender {
+    if info.sender != config.admin && info.sender != config.minter {
         return Err(ContractError::Unauthorized {
             sender: info.sender.clone().to_string(),
         });
@@ -397,7 +397,7 @@ fn execute_burn_batch(
 
     Ok(Response::new()
         .add_message(delete_resolver_msg)
-        .add_attribute("action", "burn_batch")
+        .add_attribute("action", "burn_tokens")
         .add_attribute("sender", &info.sender)
         .add_attribute("token_ids", token_ids.into_iter().collect::<String>()))
 }

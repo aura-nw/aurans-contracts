@@ -27,7 +27,7 @@ pub enum NameExecuteMsg {
     UpdateResolver {
         resolver: String,
     },
-    BurnBatch {
+    BurnTokens {
         // Should be limit batch size
         token_ids: Vec<String>,
     },

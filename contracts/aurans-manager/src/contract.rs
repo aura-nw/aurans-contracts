@@ -133,7 +133,45 @@ pub fn execute(
             backend_signature,
             extends,
         } => execute_extend_expires(deps, env, info, name, backend_signature, extends),
+        ExecuteMsg::Unregister { names } => execute_unregister(deps, env, info, names),
     }
+}
+
+fn execute_unregister(
+    deps: DepsMut,
+    _env: Env,
+    info: MessageInfo,
+    names: Vec<String>,
+) -> Result<Response, ContractError> {
+    let config = CONFIG.load(deps.storage)?;
+    if info.sender != config.admin {
+        return Err(ContractError::Unauthorized {});
+    }
+
+    let mut token_ids = Vec::new();
+    for name in names.clone() {
+        if !REGISTERS.has(deps.storage, &name) {
+            return Err(ContractError::NameNotRegisted { name });
+        }
+        let expires = REGISTERS.load(deps.storage, &name)?;
+        let token_id = join_name_and_expires(&name, expires);
+        token_ids.push(token_id);
+        REGISTERS.remove(deps.storage, &name);
+    }
+
+    let name_contract = NAME_CONTRACT.load(deps.storage)?;
+    let burn_tokens_msg = WasmMsg::Execute {
+        contract_addr: name_contract.to_string(),
+        msg: to_binary(&aurans_name::ExecuteMsg::Extension {
+            msg: aurans_name::NameExecuteMsg::BurnTokens { token_ids },
+        })?,
+        funds: vec![],
+    };
+
+    Ok(Response::new()
+        .add_message(burn_tokens_msg)
+        .add_attribute("action", "unregister")
+        .add_attribute("names", names.join(",")))
 }
 
 fn execute_extend_expires(
