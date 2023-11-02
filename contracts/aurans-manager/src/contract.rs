@@ -301,7 +301,7 @@ fn execute_register(
             sender: info.sender.to_string(),
             chain_id: env.block.chain_id,
             bech32_prefixes: bech32_prefixes.clone(),
-            expires: expires_secs,
+            expires,
         };
         let verify_msg_str =
             serde_json_wasm::to_string(&verify_msg).map_err(|_| ContractError::SerdeError)?;
