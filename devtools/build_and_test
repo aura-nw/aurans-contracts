@@ -30,6 +30,15 @@ function cmd_build() {
     cosmwasm/workspace-optimizer:0.13.0
 }
 
+function cmd_schema() {
+  (cd contracts/aurans-name && cargo schema)
+  (cd $(pwd))
+  (cd contracts/aurans-resolver && cargo schema)
+  (cd $(pwd))
+  (cd contracts/aurans-manager && cargo schema) 
+  (cd $(pwd))
+}
+
 function cmd_check() {
   cosmwasm-check artifacts/*.wasm
 }
@@ -41,7 +50,7 @@ function cmd_test() {
 function main() {
   cmds="$@"
   if [[ $# == 0 ]]; then
-    cmds="fmt test build check"
+    cmds="schema fmt test build check"
   fi
 
   for cmd in $cmds; do

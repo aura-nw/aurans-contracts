@@ -1,0 +1,36 @@
+#!/usr/bin/env bash
+
+function main() {
+  # backend_pubkey=AuwYyCUBxQiBGSUWebU46c+OrlApVsyGLHd4qhSDZeiG
+  # store code
+
+  admin=aura1yntfxtwysmgjp6wzza590xctjpzne3ak9scynv
+
+  resolver_store_txhash=$(aurad tx wasm store artifacts/aurans_resolver.wasm --from admin --fees 25000ueaura --gas 5000000 --output json -y | jq -r '.txhash')
+  sleep 5
+  resolver_code_id=$(aurad query tx $resolver_store_txhash --output json | jq -r '.logs[0].events[-1].attributes[-1].value')
+  echo "resolver_code_id: $resolver_code_id"
+
+  name_store_txhash=$(aurad tx wasm store artifacts/aurans_name.wasm --from admin --fees 25000ueaura --gas 5000000 --output json -y | jq -r '.txhash')
+  sleep 5
+  name_code_id=$(aurad query tx $name_store_txhash --output json | jq -r '.logs[0].events[-1].attributes[-1].value')
+  echo "name_code_id: $name_code_id"
+
+  manager_store_txhash=$(aurad tx wasm store artifacts/aurans_manager.wasm --from admin --fees 25000ueaura --gas 5000000 --output json -y | jq -r '.txhash')
+  sleep 5
+  manager_code_id=$(aurad query tx $manager_store_txhash --output json | jq -r '.logs[0].events[-1].attributes[-1].value')
+  echo "manager_code_id: $manager_code_id"
+
+  init_manager="{\"admin\":\"aura1yntfxtwysmgjp6wzza590xctjpzne3ak9scynv\",\"max_year_register\":5,\"prices\":[[0,{\"denom\":\"ueaura\",\"amount\":\"100\"}],[1,{\"denom\":\"ueaura\",\"amount\":\"1000\"}],[2,{\"denom\":\"ueaura\",\"amount\":\"800\"}],[3,{\"denom\":\"ueaura\",\"amount\":\"500\"}],[4,{\"denom\":\"ueaura\",\"amount\":\"300\"}]],\"backend_pubkey\":\"AuwYyCUBxQiBGSUWebU46c+OrlApVsyGLHd4qhSDZeiG\",\"name_code_id\":$name_code_id,\"resolver_code_id\":$resolver_code_id}"
+
+  ins_manager_txhash=$(aurad tx wasm instantiate $manager_code_id "$init_manager" --label "aurans-manager" --from admin --fees 25000ueaura --gas 5000000 --output json -y --no-admin | jq -r '.txhash')
+  sleep 5
+  resolver_addr=$(aurad query tx $ins_manager_txhash --output json | jq -r '.logs[0].events[-3].attributes[-1].value')
+  echo "resolver-addr: $resolver_addr"
+  name_addr=$(aurad query tx $ins_manager_txhash --output json | jq -r '.logs[0].events[-1].attributes[-1].value')
+  echo "name-addr: $name_addr"
+  mamager_addr=$(aurad query wasm list-contract-by-code $manager_code_id --output json | jq -r '.contracts[0]')
+  echo "manager-addr: $mamager_addr"
+}
+
+main
