@@ -60,7 +60,7 @@ pub fn instantiate(
             resolver_code_id: config.resolver_code_id,
         })?,
         funds: vec![],
-        label: "name".to_owned(),
+        label: "aurans-name".to_owned(),
     });
 
     let name_sub_msg = SubMsg {
