@@ -62,18 +62,18 @@ pub mod tests {
 
         let register_msg_json = serde_json_wasm::to_string(&register_msg).unwrap();
 
-        let register_msg_hash = sha2::Sha256::digest(register_msg_json);
+        let register_msg_hash = sha2::Sha256::digest(register_msg_json.clone());
 
         let sig = verifier
-            .sign(register_msg_hash.as_slice())
+            .sign(register_msg_json.as_bytes())
             .unwrap()
             .to_vec();
         let sig_binary = Binary(sig.clone());
         println!("sig={:?}", sig_binary.to_string());
 
         let verified =
-            secp256k1_verify(&register_msg_hash, &sig, &verifier.public_key().to_bytes());
-        assert!(verified.is_ok());
+            secp256k1_verify(&register_msg_hash, &sig, &verifier.public_key().to_bytes()).unwrap();
+        assert!(verified);
 
         let extend_msg = VerifyMsg::ExtendExpires {
             name: "tiennv".to_owned(),
@@ -83,10 +83,7 @@ pub mod tests {
         };
 
         let extend_msg_json = serde_json_wasm::to_string(&extend_msg).unwrap();
-
-        let extend_msg_hash = sha2::Sha256::digest(extend_msg_json);
-
-        let sig = verifier.sign(extend_msg_hash.as_slice()).unwrap().to_vec();
+        let sig = verifier.sign(extend_msg_json.as_bytes()).unwrap().to_vec();
         let sig_binary = Binary(sig.clone());
         println!("sig={:?}", sig_binary.to_string());
     }
