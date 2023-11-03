@@ -61,6 +61,8 @@ pub enum QueryMsg {
     Prices {},
     #[returns(Addr)]
     NameContract {},
+    #[returns(bool)]
+    HasRegister { name: String },
 }
 
 #[cw_serde]

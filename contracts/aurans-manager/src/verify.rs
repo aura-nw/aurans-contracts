@@ -38,8 +38,9 @@ pub mod tests {
     #[test]
     fn test_basic() {
         let derivation_path = "m/44'/118'/0'/0/0";
+        let mnemonic = "notice oak worry limit wrap speak medal online prefer cluster roof addict wrist behave treat actual wasp year salad speed social layer crew genius";
 
-        let verifier = from_mnemonic("notice oak worry limit wrap speak medal online prefer cluster roof addict wrist behave treat actual wasp year salad speed social layer crew genius", derivation_path);
+        let verifier = from_mnemonic(mnemonic, derivation_path);
 
         let binary = Binary(verifier.public_key().to_bytes());
         let pubkey_hex = binary.to_string();

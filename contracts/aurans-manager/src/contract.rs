@@ -453,6 +453,7 @@ pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<Binary> {
         QueryMsg::Verifier {} => to_binary(&query_verifier(deps)?),
         QueryMsg::Prices {} => to_binary(&query_prices(deps)?),
         QueryMsg::NameContract {} => to_binary(&query_name_contract(deps)?),
+        QueryMsg::HasRegister { name } => to_binary(&query_config(deps)?),
     }
 }
 
@@ -476,6 +477,10 @@ fn query_prices(deps: Deps) -> StdResult<PricesResponse> {
 
 fn query_name_contract(deps: Deps) -> StdResult<Addr> {
     NAME_CONTRACT.load(deps.storage)
+}
+
+fn query_has_register(deps: Deps, name: String) -> StdResult<bool> {
+    Ok(REGISTERS.has(deps.storage, &name))
 }
 
 #[cfg_attr(not(feature = "library"), entry_point)]

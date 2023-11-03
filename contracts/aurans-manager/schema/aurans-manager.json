@@ -467,6 +467,27 @@
           }
         },
         "additionalProperties": false
+      },
+      {
+        "type": "object",
+        "required": [
+          "has_register"
+        ],
+        "properties": {
+          "has_register": {
+            "type": "object",
+            "required": [
+              "name"
+            ],
+            "properties": {
+              "name": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "additionalProperties": false
       }
     ]
   },
@@ -510,6 +531,11 @@
           "type": "string"
         }
       }
+    },
+    "has_register": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "Boolean",
+      "type": "boolean"
     },
     "name_contract": {
       "$schema": "http://json-schema.org/draft-07/schema#",
