@@ -453,7 +453,7 @@ pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<Binary> {
         QueryMsg::Verifier {} => to_binary(&query_verifier(deps)?),
         QueryMsg::Prices {} => to_binary(&query_prices(deps)?),
         QueryMsg::NameContract {} => to_binary(&query_name_contract(deps)?),
-        QueryMsg::HasRegister { name } => to_binary(&query_config(deps)?),
+        QueryMsg::HasRegister { name } => to_binary(&query_has_register(deps, name)?),
     }
 }
 
