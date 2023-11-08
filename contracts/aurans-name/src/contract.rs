@@ -234,7 +234,7 @@ fn execute_mint(
         .add_attribute("minter", info.sender)
         .add_attribute("owner", owner)
         .add_attribute("token_id", token_id)
-        .add_attribute("expires", expires.to_string())
+        .add_attribute("durations", expires.to_string())
         .add_attribute("bech32_prefixes", extension.bech32_prefixes.join(",")))
 }
 

@@ -35,13 +35,17 @@ pub enum ExecuteMsg {
         backend_signature: Binary,
         metadata: Metadata,
     },
-    ExtendExpires {
+    Extend {
         name: String,
         backend_signature: Binary,
-        extends: u64,
+        durations: u64,
     },
     Unregister {
         names: Vec<String>,
+    },
+    Withdraw {
+        receiver: String,
+        coin: Coin,
     },
 }
 
@@ -77,12 +81,12 @@ pub enum VerifyMsg {
         sender: String,
         chain_id: String,
         bech32_prefixes: Vec<String>,
-        expires: u64,
+        durations: u64,
     },
-    ExtendExpires {
+    Extend {
         name: String,
         sender: String,
         chain_id: String,
-        extends: u64,
+        durations: u64,
     },
 }

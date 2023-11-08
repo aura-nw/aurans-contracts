@@ -216,21 +216,21 @@
       {
         "type": "object",
         "required": [
-          "extend_expires"
+          "extend"
         ],
         "properties": {
-          "extend_expires": {
+          "extend": {
             "type": "object",
             "required": [
               "backend_signature",
-              "extends",
+              "durations",
               "name"
             ],
             "properties": {
               "backend_signature": {
                 "$ref": "#/definitions/Binary"
               },
-              "extends": {
+              "durations": {
                 "type": "integer",
                 "format": "uint64",
                 "minimum": 0.0
@@ -267,6 +267,31 @@
           }
         },
         "additionalProperties": false
+      },
+      {
+        "type": "object",
+        "required": [
+          "withdraw"
+        ],
+        "properties": {
+          "withdraw": {
+            "type": "object",
+            "required": [
+              "coin",
+              "receiver"
+            ],
+            "properties": {
+              "coin": {
+                "$ref": "#/definitions/Coin"
+              },
+              "receiver": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "additionalProperties": false
       }
     ],
     "definitions": {
@@ -293,7 +318,7 @@
         "type": "object",
         "required": [
           "bech32_prefixes",
-          "expires"
+          "durations"
         ],
         "properties": {
           "animation_url": {
@@ -329,7 +354,7 @@
               "null"
             ]
           },
-          "expires": {
+          "durations": {
             "type": "integer",
             "format": "uint64",
             "minimum": 0.0

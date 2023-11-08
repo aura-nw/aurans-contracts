@@ -384,7 +384,7 @@
       "type": "object",
       "required": [
         "bech32_prefixes",
-        "expires"
+        "durations"
       ],
       "properties": {
         "animation_url": {
@@ -420,7 +420,7 @@
             "null"
           ]
         },
-        "expires": {
+        "durations": {
           "type": "integer",
           "format": "uint64",
           "minimum": 0.0

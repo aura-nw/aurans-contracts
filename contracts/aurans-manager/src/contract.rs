@@ -1,8 +1,8 @@
 #[cfg(not(feature = "library"))]
 use cosmwasm_std::entry_point;
 use cosmwasm_std::{
-    to_binary, Addr, Binary, Coin, CosmosMsg, Deps, DepsMut, Env, MessageInfo, Order, QueryRequest,
-    Reply, ReplyOn, Response, StdResult, SubMsg, WasmMsg, WasmQuery,
+    to_binary, Addr, BankMsg, Binary, Coin, CosmosMsg, Deps, DepsMut, Env, MessageInfo, Order,
+    QueryRequest, Reply, ReplyOn, Response, StdResult, SubMsg, WasmMsg, WasmQuery,
 };
 use cw2::set_contract_version;
 use cw721::NftInfoResponse;
@@ -12,7 +12,7 @@ use crate::error::ContractError;
 use crate::price::{calc_price, check_fee};
 use crate::state::{Config, Verifier, CONFIG, NAME_CONTRACT, PRICE_INFO, REGISTERS, VERIFIER};
 
-use crate::util::second_to_year;
+use crate::util::sec_to_years;
 use crate::verify::verify_signature;
 use aurans_name::state::Metadata;
 use aurans_name::util::join_name_and_expires;
@@ -128,13 +128,39 @@ pub fn execute(
             backend_signature,
             metadata,
         } => execute_register(deps, env, info, name, backend_signature, metadata),
-        ExecuteMsg::ExtendExpires {
+        ExecuteMsg::Extend {
             name,
             backend_signature,
-            extends,
-        } => execute_extend_expires(deps, env, info, name, backend_signature, extends),
+            durations,
+        } => execute_extend(deps, env, info, name, backend_signature, durations),
         ExecuteMsg::Unregister { names } => execute_unregister(deps, env, info, names),
+        ExecuteMsg::Withdraw { receiver, coin } => {
+            execute_withdraw(deps, env, info, receiver, coin)
+        }
     }
+}
+
+fn execute_withdraw(
+    deps: DepsMut,
+    _env: Env,
+    info: MessageInfo,
+    receiver: String,
+    coin: Coin,
+) -> Result<Response, ContractError> {
+    let config = CONFIG.load(deps.storage)?;
+    if info.sender != config.admin {
+        return Err(ContractError::Unauthorized {});
+    }
+    let receiver_addr = deps.api.addr_validate(&receiver)?;
+    let withdraw_msg = BankMsg::Send {
+        to_address: receiver_addr.to_string(),
+        amount: vec![coin.clone()],
+    };
+    Ok(Response::new()
+        .add_message(withdraw_msg)
+        .add_attribute("action", "withdraw")
+        .add_attribute("receiver", receiver)
+        .add_attribute("amount", coin.to_string()))
 }
 
 fn execute_unregister(
@@ -174,21 +200,24 @@ fn execute_unregister(
         .add_attribute("names", names.join(",")))
 }
 
-fn execute_extend_expires(
+fn execute_extend(
     deps: DepsMut,
     env: Env,
     info: MessageInfo,
     name: String,
     backend_signature: Binary,
-    extends: u64,
+    durations: u64,
 ) -> Result<Response, ContractError> {
-    let old_expires = REGISTERS
-        .load(deps.storage, &name)
-        .map_err(|_| ContractError::NameNotRegisted { name: name.clone() })?;
-
+    if REGISTERS.has(deps.storage, &name) {
+        return Err(ContractError::NameRegisted { name });
+    }
+    let old_expires = REGISTERS.load(deps.storage, &name)?;
     let config = CONFIG.load(deps.storage)?;
 
-    let years = second_to_year(extends);
+    let years = sec_to_years(durations);
+    if years == 0 {
+        return Err(ContractError::InvalidDurations);
+    }
     if years > config.max_year_register as u64 {
         return Err(ContractError::LimitYearRegister);
     }
@@ -199,11 +228,11 @@ fn execute_extend_expires(
 
     // If not owner, check verification msg
     if config.admin != info.sender {
-        let verify_msg = VerifyMsg::ExtendExpires {
+        let verify_msg = VerifyMsg::Extend {
             name: name.clone(),
             sender: info.sender.to_string(),
             chain_id: env.block.chain_id,
-            extends,
+            durations,
         };
         let verify_msg_str =
             serde_json_wasm::to_string(&verify_msg).map_err(|_| ContractError::SerdeError)?;
@@ -220,7 +249,7 @@ fn execute_extend_expires(
     // Get name contract
     let name_contract = NAME_CONTRACT.load(deps.storage)?;
     let old_token_id = join_name_and_expires(&name, old_expires);
-    let new_expires = old_expires + extends;
+    let new_expires = old_expires + durations;
     let new_token_id = join_name_and_expires(&name, new_expires);
 
     let old_token: NftInfoResponse<Metadata> =
@@ -240,14 +269,17 @@ fn execute_extend_expires(
         funds: vec![],
     };
 
+    let mut extension = old_token.extension;
+    extension.durations = durations;
+
     // Mint new name
     let mint_msg = WasmMsg::Execute {
         contract_addr: name_contract.to_string(),
         msg: to_binary(&aurans_name::ExecuteMsg::Mint {
             token_id: new_token_id,
             owner: info.sender.clone().to_string(),
-            token_uri: old_token.token_uri.clone(),
-            extension: old_token.extension.clone(),
+            token_uri: old_token.token_uri,
+            extension,
         })?,
         funds: vec![],
     };
@@ -257,10 +289,10 @@ fn execute_extend_expires(
     Ok(Response::new()
         .add_message(burn_msg)
         .add_message(mint_msg)
-        .add_attribute("action", "extend_expires")
+        .add_attribute("action", "extend")
         .add_attribute("name", name)
         .add_attribute("new_expires", new_expires.to_string())
-        .add_attribute("extends", extends.to_string()))
+        .add_attribute("durations", durations.to_string()))
 }
 
 fn execute_register(
@@ -273,27 +305,25 @@ fn execute_register(
 ) -> Result<Response, ContractError> {
     // Check name is registed or not
     if REGISTERS.has(deps.storage, &name) {
-        return Err(ContractError::NameRegisted {
-            name: name.to_owned(),
-        });
+        return Err(ContractError::NameRegisted { name });
     }
 
     let config = CONFIG.load(deps.storage)?;
-    let expires = metadata.expires;
-    let years = second_to_year(expires);
+    let durations = metadata.durations;
+    let years = sec_to_years(durations);
+    if years == 0 {
+        return Err(ContractError::InvalidDurations);
+    }
     if years > config.max_year_register {
         return Err(ContractError::LimitYearRegister);
     }
-
-    let register_secs = env.block.time.seconds();
-    let expires_secs = register_secs + expires;
 
     // Check fee
     let fee = calc_price(deps.as_ref(), &name, &years)?;
     check_fee(fee, &info.funds)?;
 
     let bech32_prefixes = metadata.bech32_prefixes;
-    let expires = metadata.expires;
+
     // If not owner, check verification msg
     if config.admin != info.sender {
         let verify_msg = VerifyMsg::Register {
@@ -301,7 +331,7 @@ fn execute_register(
             sender: info.sender.to_string(),
             chain_id: env.block.chain_id,
             bech32_prefixes: bech32_prefixes.clone(),
-            expires,
+            durations,
         };
         let verify_msg_str =
             serde_json_wasm::to_string(&verify_msg).map_err(|_| ContractError::SerdeError)?;
@@ -316,7 +346,8 @@ fn execute_register(
         )?;
     }
 
-    REGISTERS.save(deps.storage, &name, &expires_secs)?;
+    let register_secs = env.block.time.seconds();
+    let expires_secs = register_secs + durations;
 
     // Call mint msg
     let name_contract = NAME_CONTRACT.load(deps.storage)?;
@@ -341,18 +372,20 @@ fn execute_register(
                 royalty_percentage: metadata.royalty_percentage,
                 royalty_payment_address: metadata.royalty_payment_address,
                 bech32_prefixes: bech32_prefixes.clone(),
-                expires: expires.clone(),
+                durations,
             },
         })?,
         funds: vec![],
     };
+
+    REGISTERS.save(deps.storage, &name, &expires_secs)?;
 
     Ok(Response::new()
         .add_message(mint_msg)
         .add_attribute("action", "register")
         .add_attribute("name", name)
         .add_attribute("bech32_prefixes", bech32_prefixes.join(","))
-        .add_attribute("expires", expires.to_string())
+        .add_attribute("durations", durations.to_string())
         .add_attribute("register_at", register_secs.to_string())
         .add_attribute("expires_at", expires_secs.to_string())
         .add_attribute("backend_signature", backend_signature.to_string()))

@@ -122,7 +122,9 @@ fn execute_update_config(
     };
     CONFIG.save(deps.storage, &new_config)?;
 
-    Ok(Response::new().add_attributes([("action", "update_config"), ("admin", &admin)]))
+    Ok(Response::new()
+        .add_attribute("action", "update_config")
+        .add_attribute("admin", admin))
 }
 
 fn execute_update_name_contract(

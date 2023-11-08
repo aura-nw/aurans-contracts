@@ -35,7 +35,7 @@ pub struct Metadata {
     pub bech32_prefixes: Vec<String>,
 
     // Lifetime duration of nft in seconds
-    pub expires: u64,
+    pub durations: u64,
 }
 
 #[cw_serde]
