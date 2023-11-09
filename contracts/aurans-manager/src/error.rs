@@ -39,9 +39,9 @@ pub enum ContractError {
     #[error("Invalid Durations")]
     InvalidDurations,
 
-    #[error("Name Has Registed: {name:?}")]
-    NameRegisted { name: String },
+    #[error("Name Has Registered: {name:?}")]
+    NameRegistered { name: String },
 
-    #[error("Name Not Registed: {name:?}")]
-    NameNotRegisted { name: String },
+    #[error("Name Not Registered: {name:?}")]
+    NameNotRegistered { name: String },
 }

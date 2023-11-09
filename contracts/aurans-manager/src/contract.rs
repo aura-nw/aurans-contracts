@@ -177,7 +177,7 @@ fn execute_unregister(
     let mut token_ids = Vec::new();
     for name in names.clone() {
         if !REGISTERS.has(deps.storage, &name) {
-            return Err(ContractError::NameNotRegisted { name });
+            return Err(ContractError::NameNotRegistered { name });
         }
         let expires = REGISTERS.load(deps.storage, &name)?;
         let token_id = join_name_and_expires(&name, expires);
@@ -208,8 +208,8 @@ fn execute_extend(
     backend_signature: Binary,
     durations: u64,
 ) -> Result<Response, ContractError> {
-    if REGISTERS.has(deps.storage, &name) {
-        return Err(ContractError::NameRegisted { name });
+    if !REGISTERS.has(deps.storage, &name) {
+        return Err(ContractError::NameNotRegistered { name });
     }
     let old_expires = REGISTERS.load(deps.storage, &name)?;
     let config = CONFIG.load(deps.storage)?;
@@ -305,7 +305,7 @@ fn execute_register(
 ) -> Result<Response, ContractError> {
     // Check name is registed or not
     if REGISTERS.has(deps.storage, &name) {
-        return Err(ContractError::NameRegisted { name });
+        return Err(ContractError::NameRegistered { name });
     }
 
     let config = CONFIG.load(deps.storage)?;
