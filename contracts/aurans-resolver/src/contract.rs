@@ -1,5 +1,6 @@
 #[cfg(not(feature = "library"))]
 use cosmwasm_std::entry_point;
+use cosmwasm_std::StdError;
 use cosmwasm_std::{
     to_binary, Addr, Binary, Deps, DepsMut, Env, MessageInfo, Order, Response, StdResult,
 };
@@ -8,6 +9,7 @@ use cw_storage_plus::Bound;
 use cw_storage_plus::KeyDeserialize;
 
 use crate::error::ContractError;
+use crate::state::IGNORE_ADDRS;
 use crate::state::{records, Config, CONFIG, NAME_CONTRACT};
 
 use crate::msg::{
@@ -42,7 +44,7 @@ pub fn instantiate(
 
     Ok(Response::new()
         .add_attribute("action", "instantiate")
-        .add_attribute("admin", info.sender.as_ref()))
+        .add_attribute("admin", msg.admin))
 }
 
 #[cfg_attr(not(feature = "library"), entry_point)]
@@ -62,7 +64,6 @@ pub fn execute(
     info: MessageInfo,
     msg: ExecuteMsg,
 ) -> Result<Response, ContractError> {
-    let _api = deps.api;
     match msg {
         ExecuteMsg::UpdateConfig { admin } => execute_update_config(deps, env, info, admin),
         ExecuteMsg::UpdateRecord {
@@ -201,6 +202,12 @@ fn query_address_of(
 ) -> StdResult<AddressResponse> {
     let key = (primary_name.as_ref(), bech32_prefix.as_ref());
     let address = records().load(deps.storage, key)?;
+    let ignored = is_ignore_addr(deps, &deps.api.addr_validate(&address)?)?;
+    if ignored {
+        return Err(StdError::NotFound {
+            kind: "address in ignored address".to_owned(),
+        });
+    }
     Ok(AddressResponse {
         address,
         bech32_prefix,
@@ -226,6 +233,10 @@ fn query_all_addresses_of(
 
     for record in records {
         let (bech32_prefix, address) = record;
+        let ignored = is_ignore_addr(deps, &deps.api.addr_validate(&address)?)?;
+        if ignored {
+            continue;
+        }
         addresses.push(AddressResponse {
             address,
             bech32_prefix,
@@ -241,6 +252,12 @@ fn query_names(
     start_after: Option<String>,
     limit: Option<u32>,
 ) -> StdResult<NamesResponse> {
+    let ignored = is_ignore_addr(deps, &deps.api.addr_validate(&owner)?)?;
+    if ignored {
+        return Err(StdError::NotFound {
+            kind: "address in ignored address".to_owned(),
+        });
+    }
     let limit = limit.unwrap_or(DEFAULT_LIMIT).min(MAX_LIMIT) as usize;
     let start = start_after.map(|s| Bound::ExclusiveRaw(s.into()));
 
@@ -274,4 +291,10 @@ fn can_execute(deps: Deps, config: &Config, sender: &Addr) -> Result<bool, Contr
     }
 
     Err(ContractError::Unauthorized {})
+}
+
+fn is_ignore_addr(deps: Deps, addr: &Addr) -> Result<bool, StdError> {
+    let ignore_addrs = IGNORE_ADDRS.load(deps.storage)?;
+    let found = ignore_addrs.iter().any(|x| x == addr);
+    Ok(found)
 }
