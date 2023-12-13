@@ -33,3 +33,4 @@ pub fn records<'a>() -> IndexedMap<'a, (&'a str, &'a str), String, RecordIndexes
 
 pub const NAME_CONTRACT: Item<Addr> = Item::new("name_contract");
 pub const CONFIG: Item<Config> = Item::new("config");
+pub const IGNORE_ADDRS: Item<Vec<Addr>> = Item::new("ignore_addrs");

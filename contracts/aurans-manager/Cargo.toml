@@ -41,3 +41,5 @@ serde-json-wasm = { workspace = true }
 cw-multi-test = { workspace = true }
 cosmwasm-schema = { workspace = true }
 cosmwasm-storage = { workspace = true }
+cosmrs = { workspace = true }
+cosmwasm-crypto = { workspace = true }

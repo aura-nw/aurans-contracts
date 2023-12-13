@@ -33,6 +33,15 @@ pub enum ContractError {
     #[error("Invalid Arguments")]
     InvalidArguments,
 
-    #[error("Invalid Year Register")]
-    InvalidYearRegister,
+    #[error("Limit Year Register")]
+    LimitYearRegister,
+
+    #[error("Invalid Durations")]
+    InvalidDurations,
+
+    #[error("Name Has Registered: {name:?}")]
+    NameRegistered { name: String },
+
+    #[error("Name Not Registered: {name:?}")]
+    NameNotRegistered { name: String },
 }

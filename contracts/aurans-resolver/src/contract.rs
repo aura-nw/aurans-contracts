@@ -1,17 +1,21 @@
 #[cfg(not(feature = "library"))]
 use cosmwasm_std::entry_point;
+use cosmwasm_std::StdError;
 use cosmwasm_std::{
     to_binary, Addr, Binary, Deps, DepsMut, Env, MessageInfo, Order, Response, StdResult,
 };
 use cw2::set_contract_version;
 use cw_storage_plus::Bound;
+use cw_storage_plus::KeyDeserialize;
 
 use crate::error::ContractError;
+use crate::state::IGNORE_ADDRS;
 use crate::state::{records, Config, CONFIG, NAME_CONTRACT};
 
 use crate::msg::{
     AddressResponse, ExecuteMsg, InstantiateMsg, MigrateMsg, NamesResponse, QueryMsg,
 };
+use crate::util;
 
 // version info for migration info
 const CONTRACT_NAME: &str = "crates.io:aurans-resolver";
@@ -36,9 +40,11 @@ pub fn instantiate(
     };
     CONFIG.save(deps.storage, &config)?;
 
+    NAME_CONTRACT.save(deps.storage, &info.sender)?;
+
     Ok(Response::new()
         .add_attribute("action", "instantiate")
-        .add_attribute("admin", info.sender.as_ref()))
+        .add_attribute("admin", msg.admin))
 }
 
 #[cfg_attr(not(feature = "library"), entry_point)]
@@ -58,7 +64,6 @@ pub fn execute(
     info: MessageInfo,
     msg: ExecuteMsg,
 ) -> Result<Response, ContractError> {
-    let _api = deps.api;
     match msg {
         ExecuteMsg::UpdateConfig { admin } => execute_update_config(deps, env, info, admin),
         ExecuteMsg::UpdateRecord {
@@ -66,10 +71,6 @@ pub fn execute(
             bech32_prefixes,
             address,
         } => execute_update_record(deps, env, info, name, bech32_prefixes, address),
-        ExecuteMsg::DeleteRecord {
-            name,
-            bech32_prefixes,
-        } => execute_delete_record(deps, env, info, name, bech32_prefixes),
         ExecuteMsg::UpdateNameContract { name_contract } => {
             execute_update_name_contract(deps, env, info, name_contract)
         }
@@ -122,7 +123,9 @@ fn execute_update_config(
     };
     CONFIG.save(deps.storage, &new_config)?;
 
-    Ok(Response::new().add_attributes([("action", "update_config"), ("admin", &admin)]))
+    Ok(Response::new()
+        .add_attribute("action", "update_config")
+        .add_attribute("admin", admin))
 }
 
 fn execute_update_name_contract(
@@ -155,38 +158,15 @@ fn execute_update_record(
     can_execute(deps.as_ref(), &config, &info.sender)?;
 
     for bech32_prefix in &bech32_prefixes {
-        records().save(deps.storage, (&name, &bech32_prefix), &address)?;
+        let bech32_addr_decoded = util::bech32_decode(&address)?;
+        let bech32_addr = util::bech32_encode(bech32_prefix, &bech32_addr_decoded);
+        records().save(deps.storage, (&name, &bech32_prefix), &bech32_addr)?;
     }
     Ok(Response::new()
         .add_attribute("action", "update_record")
         .add_attribute("name", &name)
-        .add_attribute(
-            "list_bech32_prefix",
-            &bech32_prefixes.into_iter().collect::<String>(),
-        )
+        .add_attribute("bech32_prefixes", &bech32_prefixes.join(","))
         .add_attribute("address", &address))
-}
-
-fn execute_delete_record(
-    deps: DepsMut,
-    _env: Env,
-    info: MessageInfo,
-    name: String,
-    bech32_prefixes: Vec<String>,
-) -> Result<Response, ContractError> {
-    let config = CONFIG.load(deps.storage)?;
-    can_execute(deps.as_ref(), &config, &info.sender)?;
-
-    for bech32_prefix in &bech32_prefixes {
-        records().remove(deps.storage, (&name, &bech32_prefix))?;
-    }
-    Ok(Response::new()
-        .add_attribute("action", "delete_record")
-        .add_attribute("name", &name)
-        .add_attribute(
-            "list_bech32_prefix",
-            &bech32_prefixes.into_iter().collect::<String>(),
-        ))
 }
 
 fn execute_delete_names(
@@ -203,8 +183,8 @@ fn execute_delete_names(
     }
 
     Ok(Response::new()
-        .add_attribute("action", "delete_batch_record")
-        .add_attribute("names", names.into_iter().collect::<String>()))
+        .add_attribute("action", "delete_names")
+        .add_attribute("names", names.join(",")))
 }
 
 fn query_config(deps: Deps) -> StdResult<Config> {
@@ -221,10 +201,16 @@ fn query_address_of(
     bech32_prefix: String,
 ) -> StdResult<AddressResponse> {
     let key = (primary_name.as_ref(), bech32_prefix.as_ref());
-    let addr = records().load(deps.storage, key)?;
+    let address = records().load(deps.storage, key)?;
+    let ignored = is_ignore_addr(deps, &deps.api.addr_validate(&address)?)?;
+    if ignored {
+        return Err(StdError::NotFound {
+            kind: "address in ignored address".to_owned(),
+        });
+    }
     Ok(AddressResponse {
-        address: addr,
-        bech32_prefix: bech32_prefix,
+        address,
+        bech32_prefix,
     })
 }
 
@@ -246,9 +232,14 @@ fn query_all_addresses_of(
         .collect::<StdResult<Vec<_>>>()?;
 
     for record in records {
+        let (bech32_prefix, address) = record;
+        let ignored = is_ignore_addr(deps, &deps.api.addr_validate(&address)?)?;
+        if ignored {
+            continue;
+        }
         addresses.push(AddressResponse {
-            address: record.0,
-            bech32_prefix: record.1,
+            address,
+            bech32_prefix,
         });
     }
 
@@ -261,6 +252,12 @@ fn query_names(
     start_after: Option<String>,
     limit: Option<u32>,
 ) -> StdResult<NamesResponse> {
+    let ignored = is_ignore_addr(deps, &deps.api.addr_validate(&owner)?)?;
+    if ignored {
+        return Err(StdError::NotFound {
+            kind: "address in ignored address".to_owned(),
+        });
+    }
     let limit = limit.unwrap_or(DEFAULT_LIMIT).min(MAX_LIMIT) as usize;
     let start = start_after.map(|s| Bound::ExclusiveRaw(s.into()));
 
@@ -270,6 +267,15 @@ fn query_names(
         .prefix(owner)
         .keys(deps.storage, start, None, Order::Ascending)
         .take(limit)
+        .map(|result| {
+            result
+                .iter()
+                .map(|key| {
+                    let (name, bech32_prefix) = <(String, String)>::from_slice(key.as_bytes())?;
+                    Ok(format!("{}.{}", name, bech32_prefix))
+                })
+                .collect::<StdResult<String>>()
+        })
         .collect::<StdResult<Vec<_>>>()?;
     Ok(NamesResponse { names })
 }
@@ -285,4 +291,10 @@ fn can_execute(deps: Deps, config: &Config, sender: &Addr) -> Result<bool, Contr
     }
 
     Err(ContractError::Unauthorized {})
+}
+
+fn is_ignore_addr(deps: Deps, addr: &Addr) -> Result<bool, StdError> {
+    let ignore_addrs = IGNORE_ADDRS.load(deps.storage)?;
+    let found = ignore_addrs.iter().any(|x| x == addr);
+    Ok(found)
 }

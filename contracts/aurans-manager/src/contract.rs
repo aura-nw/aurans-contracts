@@ -1,27 +1,27 @@
 #[cfg(not(feature = "library"))]
 use cosmwasm_std::entry_point;
 use cosmwasm_std::{
-    to_binary, Binary, Coin, CosmosMsg, Deps, DepsMut, Env, MessageInfo, Reply, ReplyOn, Response,
-    StdResult, SubMsg, Timestamp, WasmMsg,
+    to_binary, Addr, BankMsg, Binary, Coin, CosmosMsg, Deps, DepsMut, Env, MessageInfo, Order,
+    QueryRequest, Reply, ReplyOn, Response, StdResult, SubMsg, WasmMsg, WasmQuery,
 };
 use cw2::set_contract_version;
+use cw721::NftInfoResponse;
 use cw_utils::parse_reply_instantiate_data;
 
 use crate::error::ContractError;
 use crate::price::{calc_price, check_fee};
-use crate::state::{
-    years_from_expires, Config, Verifier, CONFIG, NAME_CONTRACT, PRICE_INFO, VERIFIER,
-};
+use crate::state::{Config, Verifier, CONFIG, NAME_CONTRACT, PRICE_INFO, REGISTERS, VERIFIER};
+
+use crate::util::sec_to_years;
 use crate::verify::verify_signature;
 use aurans_name::state::Metadata;
+use aurans_name::util::join_name_and_expires;
 
 // version info for migration info
 const CONTRACT_NAME: &str = "crates.io:aurans-manager";
 const CONTRACT_VERSION: &str = env!("CARGO_PKG_VERSION");
 
-const MAX_YEAR_REGISTER: u8 = 5;
-
-use crate::msg::{ExecuteMsg, InstantiateMsg, MigrateMsg, QueryMsg, VerifyMsg};
+use crate::msg::{ExecuteMsg, InstantiateMsg, MigrateMsg, PricesResponse, QueryMsg, VerifyMsg};
 
 /// Handling contract instantiation
 #[cfg_attr(not(feature = "library"), entry_point)]
@@ -36,8 +36,9 @@ pub fn instantiate(
     // save contract config
     let config = Config {
         admin: deps.api.addr_validate(&msg.admin)?,
-        name_code_id: msg.name_code_id.clone(),
-        resolver_code_id: msg.resolver_code_id.clone(),
+        name_code_id: msg.name_code_id,
+        resolver_code_id: msg.resolver_code_id,
+        max_year_register: msg.max_year_register,
     };
     CONFIG.save(deps.storage, &config)?;
 
@@ -59,7 +60,7 @@ pub fn instantiate(
             resolver_code_id: config.resolver_code_id,
         })?,
         funds: vec![],
-        label: "name".to_owned(),
+        label: "aurans-name".to_owned(),
     });
 
     let name_sub_msg = SubMsg {
@@ -75,6 +76,7 @@ pub fn instantiate(
         .add_attribute("backend_pubkey", msg.backend_pubkey.to_string())
         .add_attribute("name_code_id", msg.name_code_id.to_string())
         .add_attribute("resolver_code_id", msg.resolver_code_id.to_string())
+        .add_attribute("max_year_register", msg.max_year_register.to_string())
         .add_attribute(
             "prices",
             msg.prices
@@ -102,13 +104,21 @@ pub fn execute(
     info: MessageInfo,
     msg: ExecuteMsg,
 ) -> Result<Response, ContractError> {
-    let _api = deps.api;
     match msg {
         ExecuteMsg::UpdateConfig {
             admin,
             name_code_id,
             resolver_code_id,
-        } => execute_update_config(deps, env, info, admin, name_code_id, resolver_code_id),
+            max_year_register,
+        } => execute_update_config(
+            deps,
+            env,
+            info,
+            admin,
+            name_code_id,
+            resolver_code_id,
+            max_year_register,
+        ),
         ExecuteMsg::UpdatePrices { prices } => execute_update_prices(deps, env, info, prices),
         ExecuteMsg::UpdateVerifier { backend_pubkey } => {
             execute_update_verifier(deps, env, info, backend_pubkey)
@@ -118,50 +128,111 @@ pub fn execute(
             backend_signature,
             metadata,
         } => execute_register(deps, env, info, name, backend_signature, metadata),
-        ExecuteMsg::ExtendExpires {
+        ExecuteMsg::Extend {
             name,
             backend_signature,
-            old_expires,
-            new_expires,
-        } => execute_extend_expires(
-            deps,
-            env,
-            info,
-            name,
-            backend_signature,
-            old_expires,
-            new_expires,
-        ),
+            durations,
+        } => execute_extend(deps, env, info, name, backend_signature, durations),
+        ExecuteMsg::Unregister { names } => execute_unregister(deps, env, info, names),
+        ExecuteMsg::Withdraw { receiver, coin } => {
+            execute_withdraw(deps, env, info, receiver, coin)
+        }
     }
 }
 
-fn execute_extend_expires(
+fn execute_withdraw(
+    deps: DepsMut,
+    _env: Env,
+    info: MessageInfo,
+    receiver: String,
+    coin: Coin,
+) -> Result<Response, ContractError> {
+    let config = CONFIG.load(deps.storage)?;
+    if info.sender != config.admin {
+        return Err(ContractError::Unauthorized {});
+    }
+    let receiver_addr = deps.api.addr_validate(&receiver)?;
+    let withdraw_msg = BankMsg::Send {
+        to_address: receiver_addr.to_string(),
+        amount: vec![coin.clone()],
+    };
+    Ok(Response::new()
+        .add_message(withdraw_msg)
+        .add_attribute("action", "withdraw")
+        .add_attribute("receiver", receiver)
+        .add_attribute("amount", coin.to_string()))
+}
+
+fn execute_unregister(
+    deps: DepsMut,
+    _env: Env,
+    info: MessageInfo,
+    names: Vec<String>,
+) -> Result<Response, ContractError> {
+    let config = CONFIG.load(deps.storage)?;
+    if info.sender != config.admin {
+        return Err(ContractError::Unauthorized {});
+    }
+
+    let mut token_ids = Vec::new();
+    for name in names.clone() {
+        if !REGISTERS.has(deps.storage, &name) {
+            return Err(ContractError::NameNotRegistered { name });
+        }
+        let expires = REGISTERS.load(deps.storage, &name)?;
+        let token_id = join_name_and_expires(&name, expires);
+        token_ids.push(token_id);
+        REGISTERS.remove(deps.storage, &name);
+    }
+
+    let name_contract = NAME_CONTRACT.load(deps.storage)?;
+    let burn_tokens_msg = WasmMsg::Execute {
+        contract_addr: name_contract.to_string(),
+        msg: to_binary(&aurans_name::ExecuteMsg::Extension {
+            msg: aurans_name::NameExecuteMsg::BurnTokens { token_ids },
+        })?,
+        funds: vec![],
+    };
+
+    Ok(Response::new()
+        .add_message(burn_tokens_msg)
+        .add_attribute("action", "unregister")
+        .add_attribute("names", names.join(",")))
+}
+
+fn execute_extend(
     deps: DepsMut,
     env: Env,
     info: MessageInfo,
     name: String,
     backend_signature: Binary,
-    old_expires: Timestamp,
-    new_expires: Timestamp,
+    durations: u64,
 ) -> Result<Response, ContractError> {
-    let years = years_from_expires(&old_expires, &new_expires);
-    if years > MAX_YEAR_REGISTER as u64 {
-        return Err(ContractError::InvalidYearRegister);
+    if !REGISTERS.has(deps.storage, &name) {
+        return Err(ContractError::NameNotRegistered { name });
+    }
+    let old_expires = REGISTERS.load(deps.storage, &name)?;
+    let config = CONFIG.load(deps.storage)?;
+
+    let years = sec_to_years(durations);
+    if years == 0 {
+        return Err(ContractError::InvalidDurations);
+    }
+    if years > config.max_year_register as u64 {
+        return Err(ContractError::LimitYearRegister);
     }
 
-    // Check fee
-    let fee = calc_price(deps.as_ref(), &name, &(years as u8))?;
+    // Check user funds
+    let fee = calc_price(deps.as_ref(), &name, &years)?;
     check_fee(fee, &info.funds)?;
 
-    let config = CONFIG.load(deps.storage)?;
     // If not owner, check verification msg
     if config.admin != info.sender {
-        let verify_msg = VerifyMsg::ExtendExpires {
+        let verify_msg = VerifyMsg::Extend {
             name: name.clone(),
             sender: info.sender.to_string(),
             chain_id: env.block.chain_id,
-            old_expires: old_expires.clone().seconds(),
-            new_expires: new_expires.clone().seconds(),
+            durations,
         };
         let verify_msg_str =
             serde_json_wasm::to_string(&verify_msg).map_err(|_| ContractError::SerdeError)?;
@@ -175,23 +246,54 @@ fn execute_extend_expires(
             &verifier.backend_pubkey,
         )?;
     }
+    // Get name contract
     let name_contract = NAME_CONTRACT.load(deps.storage)?;
-    let msg = aurans_name::ExecuteMsg::Extension {
-        msg: aurans_name::NameExecuteMsg::ExtendExpires {
-            token_id: format!("{}@{}", name.clone(), old_expires.seconds()),
-            new_expires: new_expires,
-        },
-    };
-    let extend_msg = WasmMsg::Execute {
+    let old_token_id = join_name_and_expires(&name, old_expires);
+    let new_expires = old_expires + durations;
+    let new_token_id = join_name_and_expires(&name, new_expires);
+
+    let old_token: NftInfoResponse<Metadata> =
+        deps.querier.query(&QueryRequest::Wasm(WasmQuery::Smart {
+            contract_addr: name_contract.to_string(),
+            msg: to_binary(&aurans_name::QueryMsg::NftInfo {
+                token_id: old_token_id.clone(),
+            })?,
+        }))?;
+
+    // Burn old name
+    let burn_msg = WasmMsg::Execute {
         contract_addr: name_contract.to_string(),
-        msg: to_binary(&msg)?,
+        msg: to_binary(&aurans_name::ExecuteMsg::Burn {
+            token_id: old_token_id,
+        })?,
         funds: vec![],
     };
+
+    let mut extension = old_token.extension;
+    extension.durations = durations;
+
+    // Mint new name
+    let mint_msg = WasmMsg::Execute {
+        contract_addr: name_contract.to_string(),
+        msg: to_binary(&aurans_name::ExecuteMsg::Mint {
+            token_id: new_token_id,
+            owner: info.sender.clone().to_string(),
+            token_uri: old_token.token_uri,
+            extension,
+        })?,
+        funds: vec![],
+    };
+
+    REGISTERS.save(deps.storage, &name, &new_expires)?;
+
     Ok(Response::new()
-        .add_message(extend_msg)
-        .add_attribute("action", "extend_expires")
+        .add_message(burn_msg)
+        .add_message(mint_msg)
+        .add_attribute("action", "extend")
+        .add_attribute("sender", info.sender)
         .add_attribute("name", name)
-        .add_attribute("new_expires", new_expires.to_string()))
+        .add_attribute("new_expires", new_expires.to_string())
+        .add_attribute("durations", durations.to_string()))
 }
 
 fn execute_register(
@@ -202,18 +304,27 @@ fn execute_register(
     backend_signature: Binary,
     metadata: Metadata,
 ) -> Result<Response, ContractError> {
-    let years = metadata.years;
-    if years > MAX_YEAR_REGISTER {
-        return Err(ContractError::InvalidYearRegister);
+    // Check name is registed or not
+    if REGISTERS.has(deps.storage, &name) {
+        return Err(ContractError::NameRegistered { name });
+    }
+
+    let config = CONFIG.load(deps.storage)?;
+    let durations = metadata.durations;
+    let years = sec_to_years(durations);
+    if years == 0 {
+        return Err(ContractError::InvalidDurations);
+    }
+    if years > config.max_year_register {
+        return Err(ContractError::LimitYearRegister);
     }
 
     // Check fee
     let fee = calc_price(deps.as_ref(), &name, &years)?;
     check_fee(fee, &info.funds)?;
 
-    let config = CONFIG.load(deps.storage)?;
     let bech32_prefixes = metadata.bech32_prefixes;
-    let expires = metadata.expires;
+
     // If not owner, check verification msg
     if config.admin != info.sender {
         let verify_msg = VerifyMsg::Register {
@@ -221,7 +332,7 @@ fn execute_register(
             sender: info.sender.to_string(),
             chain_id: env.block.chain_id,
             bech32_prefixes: bech32_prefixes.clone(),
-            expires: expires.clone().seconds(),
+            durations,
         };
         let verify_msg_str =
             serde_json_wasm::to_string(&verify_msg).map_err(|_| ContractError::SerdeError)?;
@@ -236,12 +347,17 @@ fn execute_register(
         )?;
     }
 
+    let register_secs = env.block.time.seconds();
+    let expires_secs = register_secs + durations;
+
     // Call mint msg
     let name_contract = NAME_CONTRACT.load(deps.storage)?;
+    let token_id = join_name_and_expires(&name, expires_secs);
+
     let mint_msg = WasmMsg::Execute {
         contract_addr: name_contract.to_string(),
         msg: to_binary(&aurans_name::ExecuteMsg::Mint {
-            token_id: name.clone(),
+            token_id,
             owner: info.sender.to_string(),
             token_uri: None,
             extension: Metadata {
@@ -257,19 +373,23 @@ fn execute_register(
                 royalty_percentage: metadata.royalty_percentage,
                 royalty_payment_address: metadata.royalty_payment_address,
                 bech32_prefixes: bech32_prefixes.clone(),
-                expires: expires.clone(),
-                years: years.clone(),
+                durations,
             },
         })?,
         funds: vec![],
     };
 
+    REGISTERS.save(deps.storage, &name, &expires_secs)?;
+
     Ok(Response::new()
         .add_message(mint_msg)
         .add_attribute("action", "register")
+        .add_attribute("sender", info.sender)
         .add_attribute("name", name)
         .add_attribute("bech32_prefixes", bech32_prefixes.join(","))
-        .add_attribute("years", years.to_string())
+        .add_attribute("durations", durations.to_string())
+        .add_attribute("register_at", register_secs.to_string())
+        .add_attribute("expires_at", expires_secs.to_string())
         .add_attribute("backend_signature", backend_signature.to_string()))
 }
 
@@ -336,6 +456,7 @@ fn execute_update_config(
     admin: String,
     name_code_id: u64,
     resolver_code_id: u64,
+    max_year_register: u64,
 ) -> Result<Response, ContractError> {
     // only contract admin can update config
     let config = CONFIG.load(deps.storage)?;
@@ -348,6 +469,7 @@ fn execute_update_config(
         admin: deps.api.addr_validate(&admin)?,
         name_code_id,
         resolver_code_id,
+        max_year_register,
     };
     CONFIG.save(deps.storage, &new_config)?;
 
@@ -355,18 +477,45 @@ fn execute_update_config(
         .add_attribute("action", "update_config")
         .add_attribute("admin", admin.to_string())
         .add_attribute("name_code_id", name_code_id.to_string())
-        .add_attribute("resolver_code_id", resolver_code_id.to_string()))
+        .add_attribute("resolver_code_id", resolver_code_id.to_string())
+        .add_attribute("max_year_register", max_year_register.to_string()))
 }
 
 #[cfg_attr(not(feature = "library"), entry_point)]
 pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<Binary> {
     match msg {
         QueryMsg::Config {} => to_binary(&query_config(deps)?),
+        QueryMsg::Verifier {} => to_binary(&query_verifier(deps)?),
+        QueryMsg::Prices {} => to_binary(&query_prices(deps)?),
+        QueryMsg::NameContract {} => to_binary(&query_name_contract(deps)?),
+        QueryMsg::HasRegister { name } => to_binary(&query_has_register(deps, name)?),
     }
 }
 
 fn query_config(deps: Deps) -> StdResult<Config> {
     CONFIG.load(deps.storage)
+}
+
+fn query_verifier(deps: Deps) -> StdResult<Verifier> {
+    VERIFIER.load(deps.storage)
+}
+
+fn query_prices(deps: Deps) -> StdResult<PricesResponse> {
+    let prices_res: StdResult<Vec<_>> = PRICE_INFO
+        .range(deps.storage, None, None, Order::Ascending)
+        .collect();
+    match prices_res {
+        Ok(prices) => Ok(PricesResponse { prices: prices }),
+        Err(_) => Ok(PricesResponse { prices: vec![] }),
+    }
+}
+
+fn query_name_contract(deps: Deps) -> StdResult<Addr> {
+    NAME_CONTRACT.load(deps.storage)
+}
+
+fn query_has_register(deps: Deps, name: String) -> StdResult<bool> {
+    Ok(REGISTERS.has(deps.storage, &name))
 }
 
 #[cfg_attr(not(feature = "library"), entry_point)]

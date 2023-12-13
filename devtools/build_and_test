@@ -16,7 +16,7 @@
 set -euo pipefail
 
 function exists() {
-  command -v "$1" &> /dev/null
+  command -v "$1" &>/dev/null
 }
 
 function cmd_fmt() {
@@ -25,9 +25,18 @@ function cmd_fmt() {
 
 function cmd_build() {
   docker run --rm -v "$(pwd)":/code \
-  --mount type=volume,source="$(basename "$(pwd)")_cache",target=/code/target \
-  --mount type=volume,source=registry_cache,target=/usr/local/cargo/registry \
-  cosmwasm/workspace-optimizer:0.13.0
+    --mount type=volume,source="$(basename "$(pwd)")_cache",target=/code/target \
+    --mount type=volume,source=registry_cache,target=/usr/local/cargo/registry \
+    cosmwasm/workspace-optimizer:0.13.0
+}
+
+function cmd_schema() {
+  (cd contracts/aurans-name && cargo schema)
+  (cd $(pwd))
+  (cd contracts/aurans-resolver && cargo schema)
+  (cd $(pwd))
+  (cd contracts/aurans-manager && cargo schema) 
+  (cd $(pwd))
 }
 
 function cmd_check() {
@@ -41,7 +50,7 @@ function cmd_test() {
 function main() {
   cmds="$@"
   if [[ $# == 0 ]]; then
-    cmds="fmt test build check"
+    cmds="schema fmt test build check"
   fi
 
   for cmd in $cmds; do

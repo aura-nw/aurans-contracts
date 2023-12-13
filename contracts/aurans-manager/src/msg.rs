@@ -1,8 +1,8 @@
 use aurans_name::state::Metadata;
 use cosmwasm_schema::{cw_serde, QueryResponses};
-use cosmwasm_std::{Binary, Coin, Timestamp};
+use cosmwasm_std::{Addr, Binary, Coin};
 
-use crate::state::Config;
+use crate::state::{Config, Verifier};
 
 /// Message type for `instantiate` entry_point
 #[cw_serde]
@@ -12,6 +12,7 @@ pub struct InstantiateMsg {
     pub backend_pubkey: Binary,
     pub name_code_id: u64,
     pub resolver_code_id: u64,
+    pub max_year_register: u64,
 }
 
 /// Message type for `execute` entry_point
@@ -21,6 +22,7 @@ pub enum ExecuteMsg {
         admin: String,
         name_code_id: u64,
         resolver_code_id: u64,
+        max_year_register: u64,
     },
     UpdatePrices {
         prices: Vec<(u8, Coin)>,
@@ -33,11 +35,17 @@ pub enum ExecuteMsg {
         backend_signature: Binary,
         metadata: Metadata,
     },
-    ExtendExpires {
+    Extend {
         name: String,
         backend_signature: Binary,
-        old_expires: Timestamp,
-        new_expires: Timestamp,
+        durations: u64,
+    },
+    Unregister {
+        names: Vec<String>,
+    },
+    Withdraw {
+        receiver: String,
+        coin: Coin,
     },
 }
 
@@ -51,6 +59,19 @@ pub enum MigrateMsg {}
 pub enum QueryMsg {
     #[returns(Config)]
     Config {},
+    #[returns(Verifier)]
+    Verifier {},
+    #[returns(PricesResponse)]
+    Prices {},
+    #[returns(Addr)]
+    NameContract {},
+    #[returns(bool)]
+    HasRegister { name: String },
+}
+
+#[cw_serde]
+pub struct PricesResponse {
+    pub prices: Vec<(u8, Coin)>,
 }
 
 #[cw_serde]
@@ -60,13 +81,12 @@ pub enum VerifyMsg {
         sender: String,
         chain_id: String,
         bech32_prefixes: Vec<String>,
-        expires: u64,
+        durations: u64,
     },
-    ExtendExpires {
+    Extend {
         name: String,
         sender: String,
         chain_id: String,
-        old_expires: u64,
-        new_expires: u64,
+        durations: u64,
     },
 }

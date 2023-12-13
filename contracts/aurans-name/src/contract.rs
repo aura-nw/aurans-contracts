@@ -2,7 +2,7 @@
 use cosmwasm_std::entry_point;
 use cosmwasm_std::{
     to_binary, Binary, CosmosMsg, Deps, DepsMut, Empty, Env, MessageInfo, Reply, ReplyOn, Response,
-    StdResult, SubMsg, Timestamp, WasmMsg,
+    StdResult, SubMsg, WasmMsg,
 };
 use cw2::set_contract_version;
 use cw721::{ContractInfoResponse, Cw721ReceiveMsg};
@@ -16,6 +16,7 @@ use cw721_base::QueryMsg::Extension as QExtension;
 
 use aurans_resolver::msg::InstantiateMsg as ResolverInstantiateMsg;
 use aurans_resolver::ExecuteMsg::{DeleteNames, UpdateRecord};
+use cw721_base::state::TokenInfo;
 use cw_utils::parse_reply_instantiate_data;
 use std::vec;
 
@@ -31,6 +32,8 @@ const CONTRACT_VERSION: &str = env!("CARGO_PKG_VERSION");
 
 const AURANS_NAME: &str = "aurans-name";
 const AURANS_SYMBOL: &str = "ans";
+
+const DEFAULT_LIMIT_BACTH: usize = 10;
 
 /// This contract extends the Cw721 contract from CosmWasm to create non-fungible tokens (NFTs)
 /// that represent unique names. Each name is represented as a unique NFT.
@@ -50,6 +53,7 @@ pub fn instantiate(
     // save contract config
     let config = Config {
         admin: deps.api.addr_validate(&msg.admin)?,
+        minter: deps.api.addr_validate(&msg.minter)?,
     };
     CONFIG.save(deps.storage, &config)?;
 
@@ -62,9 +66,6 @@ pub fn instantiate(
     };
     name_cw721.contract_info.save(deps.storage, &info)?;
 
-    // initialize owner
-    cw_ownable::initialize_owner(deps.storage, deps.api, Some(&msg.minter))?;
-
     let resolver_ins_msg = CosmosMsg::Wasm(WasmMsg::Instantiate {
         admin: Some(env.contract.address.to_string()),
         code_id: msg.resolver_code_id,
@@ -72,7 +73,7 @@ pub fn instantiate(
             admin: config.admin.to_string(),
         })?,
         funds: vec![],
-        label: "resolver".to_owned(),
+        label: "aurans-resolver".to_owned(),
     });
 
     let resolver_sub_msg = SubMsg {
@@ -123,14 +124,13 @@ pub fn execute(
             token_uri,
             extension,
         } => execute_mint(deps, env, info, token_id, owner, token_uri, extension),
+        Burn { token_id } => execute_burn(deps, env, info, token_id),
         EExtension { msg } => match msg {
-            NameExecuteMsg::UpdateConfig { admin } => execute_update_config(deps, env, info, admin),
-            NameExecuteMsg::ExtendExpires {
-                token_id,
-                new_expires,
-            } => execute_extend_expires(deps, env, info, token_id, new_expires),
-            NameExecuteMsg::EvictBatch { token_ids } => {
-                execute_evict_batch(deps, env, info, token_ids)
+            NameExecuteMsg::UpdateConfig { admin, minter } => {
+                execute_update_config(deps, env, info, admin, minter)
+            }
+            NameExecuteMsg::BurnTokens { token_ids } => {
+                execute_burn_tokens(deps, env, info, token_ids)
             }
             NameExecuteMsg::UpdateResolver { resolver } => {
                 execute_update_resolver(deps, env, info, resolver)
@@ -138,7 +138,6 @@ pub fn execute(
         },
         msg @ Approve { .. }
         | msg @ ApproveAll { .. }
-        | msg @ Burn { .. }
         | msg @ UpdateOwnership { .. }
         | msg @ Revoke { .. }
         | msg @ RevokeAll { .. } => {
@@ -146,6 +145,45 @@ pub fn execute(
             name_cw721.execute(deps, env, info, msg).map_err(Into::into)
         }
     }
+}
+
+// In cw721 implementation it check can send of token.
+// So we need custom burn execution, allow minter and owner can burn the token
+fn execute_burn(
+    deps: DepsMut,
+    _env: Env,
+    info: MessageInfo,
+    token_id: String,
+) -> Result<Response, ContractError> {
+    // Require sender is minter or admin
+    let config: Config = CONFIG.load(deps.storage)?;
+    if info.sender != config.admin && info.sender != config.minter {
+        return Err(ContractError::Unauthorized {
+            sender: info.sender.clone().to_string(),
+        });
+    }
+
+    let name_cw721 = NameCw721::default();
+    name_cw721.tokens.remove(deps.storage, &token_id)?;
+    name_cw721.decrement_tokens(deps.storage)?;
+
+    let (name, _) = extract_name_from_token_id(&token_id)?;
+
+    // Delete name from resolver
+    let resolver = RESOLVER.load(deps.storage)?;
+    let delete_names = DeleteNames {
+        names: vec![name.to_string()],
+    };
+    let delete_names_msg = WasmMsg::Execute {
+        contract_addr: resolver.address.to_string(),
+        msg: to_binary(&delete_names)?,
+        funds: vec![],
+    };
+    Ok(Response::new()
+        .add_message(delete_names_msg)
+        .add_attribute("action", "burn")
+        .add_attribute("sender", info.sender)
+        .add_attribute("token_id", token_id.to_string()))
 }
 
 fn execute_mint(
@@ -159,14 +197,24 @@ fn execute_mint(
 ) -> Result<Response, ContractError> {
     let resolver = RESOLVER.load(deps.as_ref().storage)?;
     let name_cw721 = NameCw721::default();
-    name_cw721.mint(
-        deps,
-        info.clone(),
-        token_id.clone(),
-        owner.clone(),
-        token_uri,
-        extension.clone(),
-    )?;
+
+    // create the token
+    let token = TokenInfo {
+        owner: deps.api.addr_validate(&owner)?,
+        approvals: vec![],
+        token_uri: token_uri.clone(),
+        extension: extension.clone(),
+    };
+    name_cw721
+        .tokens
+        .update(deps.storage, &token_id, |old| match old {
+            Some(_) => Err(ContractError::CW721Base(
+                cw721_base::ContractError::Claimed {},
+            )),
+            None => Ok(token),
+        })?;
+
+    name_cw721.increment_tokens(deps.storage)?;
 
     let (name, expires) = extract_name_from_token_id(token_id.as_ref())?;
     let update_record = UpdateRecord {
@@ -186,7 +234,7 @@ fn execute_mint(
         .add_attribute("minter", info.sender)
         .add_attribute("owner", owner)
         .add_attribute("token_id", token_id)
-        .add_attribute("expires", expires.to_string())
+        .add_attribute("durations", expires.to_string())
         .add_attribute("bech32_prefixes", extension.bech32_prefixes.join(",")))
 }
 
@@ -268,7 +316,9 @@ fn execute_update_resolver(
     // only contract admin can update resolver
     let config = CONFIG.load(deps.storage)?;
     if config.admin != info.sender {
-        return Err(ContractError::Unauthorized {});
+        return Err(ContractError::Unauthorized {
+            sender: info.sender.clone().to_string(),
+        });
     }
 
     let r = Resolver {
@@ -286,97 +336,31 @@ fn execute_update_config(
     _env: Env,
     info: MessageInfo,
     admin: String,
+    minter: String,
 ) -> Result<Response, ContractError> {
     // only contract admin can update config
     let config = CONFIG.load(deps.storage)?;
     if config.admin != info.sender {
-        return Err(ContractError::Unauthorized {});
+        return Err(ContractError::Unauthorized {
+            sender: info.sender.clone().to_string(),
+        });
     }
 
     // update config
     let new_config = Config {
         admin: deps.api.addr_validate(&admin)?,
+        minter: deps.api.addr_validate(&minter)?,
     };
     CONFIG.save(deps.storage, &new_config)?;
 
     Ok(Response::new()
         .add_attribute("action", "update_config")
-        .add_attribute("admin", &admin))
+        .add_attribute("admin", admin)
+        .add_attribute("minter", minter))
 }
-
-// REQUIRED: sender must be minter
-fn execute_extend_expires(
-    deps: DepsMut,
-    _env: Env,
-    info: MessageInfo,
-    token_id: String,
-    new_expires: Timestamp,
-) -> Result<Response, ContractError> {
-    let name_cw721 = NameCw721::default();
-    let mut old_token = name_cw721.tokens.load(deps.storage, &token_id)?;
-
-    let old_metadata = old_token.clone().extension;
-    old_token.extension.bech32_prefixes = old_metadata.bech32_prefixes.clone();
-
-    // Burn old token
-    name_cw721.tokens.remove(deps.storage, &token_id)?;
-    name_cw721.decrement_tokens(deps.storage)?;
-
-    let response = Response::new()
-        .add_attribute("action", "burn")
-        .add_attribute("sender", &info.sender)
-        .add_attribute("token_id", &token_id);
-
-    let resolver = RESOLVER.load(deps.as_ref().storage)?;
-
-    // Mint new token
-    let (name, _) = extract_name_from_token_id(token_id.as_ref())?;
-    let new_token_id = format!("{}@{}", name, new_expires.seconds());
-    name_cw721.mint(
-        deps,
-        info.clone(),
-        new_token_id.clone(),
-        old_token.owner.clone().to_string(),
-        old_token.token_uri,
-        old_metadata.clone(),
-    )?;
-
-    // Delete name from resolver
-    let delete_names = DeleteNames {
-        names: vec![name.to_owned()],
-    };
-    let delete_resolver_msg = WasmMsg::Execute {
-        contract_addr: resolver.address.to_string(),
-        msg: to_binary(&delete_names)?,
-        funds: vec![],
-    };
-
-    // Update resolver
-    let update_record = UpdateRecord {
-        name: name.to_owned(),
-        bech32_prefixes: old_metadata.bech32_prefixes,
-        address: old_token.owner.to_string(),
-    };
-    let update_resolver_msg = WasmMsg::Execute {
-        contract_addr: resolver.address.to_string(),
-        msg: to_binary(&update_record)?,
-        funds: vec![],
-    };
-
-    let response = response
-        .add_message(delete_resolver_msg)
-        .add_message(update_resolver_msg)
-        .add_attribute("action", "mint")
-        .add_attribute("minter", info.sender)
-        .add_attribute("owner", old_token.owner.to_string())
-        .add_attribute("token_id", new_token_id);
-    Ok(response)
-}
-
-const DEFAULT_LIMIT_BACTH: usize = 10;
 
 // REQUIRED: sender must be admin
-fn execute_evict_batch(
+fn execute_burn_tokens(
     deps: DepsMut,
     _env: Env,
     info: MessageInfo,
@@ -386,8 +370,10 @@ fn execute_evict_batch(
         return Err(ContractError::BatchTooLong {});
     }
     let config = CONFIG.load(deps.storage)?;
-    if config.admin != info.sender {
-        return Err(ContractError::Unauthorized {});
+    if info.sender != config.admin && info.sender != config.minter {
+        return Err(ContractError::Unauthorized {
+            sender: info.sender.clone().to_string(),
+        });
     }
 
     let name_cw721 = NameCw721::default();
@@ -411,7 +397,7 @@ fn execute_evict_batch(
 
     Ok(Response::new()
         .add_message(delete_resolver_msg)
-        .add_attribute("action", "evict_batch")
+        .add_attribute("action", "burn_tokens")
         .add_attribute("sender", &info.sender)
         .add_attribute("token_ids", token_ids.into_iter().collect::<String>()))
 }
@@ -422,12 +408,17 @@ pub fn query(deps: Deps, env: Env, msg: QueryMsg) -> StdResult<Binary> {
         // Default query by cw721
         QExtension { msg } => match msg {
             NameQueryMsg::Config {} => to_binary(&query_config(deps)?),
+            NameQueryMsg::Resolver {} => to_binary(&query_resolver(deps)?),
         },
         _ => {
             let name_cw721 = NameCw721::default();
             name_cw721.query(deps, env, msg)
         }
     }
+}
+
+fn query_resolver(deps: Deps) -> StdResult<Resolver> {
+    RESOLVER.load(deps.storage)
 }
 
 fn query_config(deps: Deps) -> StdResult<Config> {

@@ -23,10 +23,6 @@ pub enum ExecuteMsg {
         bech32_prefixes: Vec<String>,
         address: String,
     },
-    DeleteRecord {
-        name: String,
-        bech32_prefixes: Vec<String>,
-    },
     DeleteNames {
         names: Vec<String>,
     },

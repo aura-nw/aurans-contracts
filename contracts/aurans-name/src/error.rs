@@ -9,8 +9,8 @@ pub enum ContractError {
     #[error("Custom Error val: {val:?}")]
     CustomError { val: String },
 
-    #[error("Unauthorized")]
-    Unauthorized {},
+    #[error("Unauthorized sender: {sender:?}")]
+    Unauthorized { sender: String },
 
     #[error("Already registered")]
     UserRegistered {},

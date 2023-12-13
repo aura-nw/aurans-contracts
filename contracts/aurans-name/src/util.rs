@@ -14,8 +14,14 @@ pub fn extract_name_from_token_id(token_id: &str) -> Result<(&str, u64), Contrac
     }
 }
 
+pub fn join_name_and_expires(name: &str, expires: u64) -> String {
+    format!("{}@{}", name, expires)
+}
+
 #[cfg(test)]
 mod tests {
+
+    use crate::util::join_name_and_expires;
 
     use super::extract_name_from_token_id;
 
@@ -27,5 +33,12 @@ mod tests {
         let (name, expires) = name.unwrap();
         assert_eq!(name, "tiennv");
         assert_eq!(expires, 100000000000);
+    }
+
+    #[test]
+    fn test_join_name_and_expires() {
+        let name = "tiennv";
+        let expires = 1729331450;
+        assert_eq!(join_name_and_expires(name, expires), "tiennv@1729331450");
     }
 }

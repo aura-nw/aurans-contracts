@@ -98,6 +98,13 @@ pub mod env {
                     admin: ADMIN.to_string(),
                     prices: vec![
                         (
+                            0,
+                            Coin {
+                                denom: NATIVE_DENOM.to_string(),
+                                amount: Uint128::from(BASE_PRICE),
+                            },
+                        ),
+                        (
                             1,
                             Coin {
                                 denom: NATIVE_DENOM.to_string(),
@@ -129,13 +136,14 @@ pub mod env {
                             5,
                             Coin {
                                 denom: NATIVE_DENOM.to_string(),
-                                amount: Uint128::from(BASE_PRICE),
+                                amount: Uint128::from(BASE_PRICE * 5),
                             },
                         ),
                     ],
                     backend_pubkey: Binary::from(b"test"),
                     name_code_id: name_contract_code_id,
                     resolver_code_id: resolver_contract_code_id,
+                    max_year_register: 5,
                 },
                 &[],
                 "test instantiate contract",
