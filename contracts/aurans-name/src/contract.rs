@@ -24,7 +24,6 @@ use crate::error::ContractError;
 use crate::state::{Config, Metadata, Resolver, CONFIG, RESOLVER};
 
 use crate::msg::{ExecuteMsg, InstantiateMsg, MigrateMsg, NameExecuteMsg, NameQueryMsg, QueryMsg};
-use crate::util::extract_name_from_token_id;
 
 // version info for migration info
 const CONTRACT_NAME: &str = "crates.io:aurans-name";
@@ -167,12 +166,10 @@ fn execute_burn(
     name_cw721.tokens.remove(deps.storage, &token_id)?;
     name_cw721.decrement_tokens(deps.storage)?;
 
-    let (name, _) = extract_name_from_token_id(&token_id)?;
-
     // Delete name from resolver
     let resolver = RESOLVER.load(deps.storage)?;
     let delete_names = DeleteNames {
-        names: vec![name.to_string()],
+        names: vec![token_id.to_string()],
     };
     let delete_names_msg = WasmMsg::Execute {
         contract_addr: resolver.address.to_string(),
@@ -216,9 +213,8 @@ fn execute_mint(
 
     name_cw721.increment_tokens(deps.storage)?;
 
-    let (name, expires) = extract_name_from_token_id(token_id.as_ref())?;
     let update_record = UpdateRecord {
-        name: name.to_owned(),
+        name: token_id.to_owned(),
         bech32_prefixes: extension.clone().bech32_prefixes,
         address: owner.clone(),
     };
@@ -234,7 +230,7 @@ fn execute_mint(
         .add_attribute("minter", info.sender)
         .add_attribute("owner", owner)
         .add_attribute("token_id", token_id)
-        .add_attribute("durations", expires.to_string())
+        .add_attribute("durations", extension.durations.to_string())
         .add_attribute("bech32_prefixes", extension.bech32_prefixes.join(",")))
 }
 
@@ -249,9 +245,9 @@ fn execute_transfer_nft(
     let name_cw721 = NameCw721::default();
     let token = name_cw721._transfer_nft(deps, &env, &info, &recipient, &token_id)?;
     let metadata = token.extension;
-    let (name, _) = extract_name_from_token_id(token_id.as_ref())?;
+
     let update_record = UpdateRecord {
-        name: name.to_owned(),
+        name: token_id.to_owned(),
         bech32_prefixes: metadata.bech32_prefixes,
         address: recipient.clone(),
     };
@@ -286,9 +282,9 @@ fn execute_send_nft(
         msg,
     };
     let metadata = token.extension;
-    let (name, _) = extract_name_from_token_id(token_id.as_ref())?;
+
     let update_record = UpdateRecord {
-        name: name.to_owned(),
+        name: token_id.to_owned(),
         bech32_prefixes: metadata.bech32_prefixes,
         address: contract.clone(),
     };
@@ -384,8 +380,7 @@ fn execute_burn_tokens(
     // Delete records has burn to resolver
     let mut names: Vec<String> = Vec::new();
     for token_id in &token_ids {
-        let (name, _) = extract_name_from_token_id(token_id)?;
-        names.push(name.to_owned());
+        names.push(token_id.to_owned());
     }
     let delete_names = DeleteNames { names };
     let resolver = RESOLVER.load(deps.as_ref().storage)?;
