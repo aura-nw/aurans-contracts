@@ -15,7 +15,6 @@ use crate::state::{Config, Verifier, CONFIG, NAME_CONTRACT, PRICE_INFO, REGISTER
 use crate::util::sec_to_years;
 use crate::verify::verify_signature;
 use aurans_name::state::Metadata;
-use aurans_name::util::join_name_and_expires;
 
 // version info for migration info
 const CONTRACT_NAME: &str = "crates.io:aurans-manager";
@@ -179,9 +178,8 @@ fn execute_unregister(
         if !REGISTERS.has(deps.storage, &name) {
             return Err(ContractError::NameNotRegistered { name });
         }
-        let expires = REGISTERS.load(deps.storage, &name)?;
-        let token_id = join_name_and_expires(&name, expires);
-        token_ids.push(token_id);
+        let _ = REGISTERS.load(deps.storage, &name)?;
+        token_ids.push(name.clone());
         REGISTERS.remove(deps.storage, &name);
     }
 
@@ -248,15 +246,13 @@ fn execute_extend(
     }
     // Get name contract
     let name_contract = NAME_CONTRACT.load(deps.storage)?;
-    let old_token_id = join_name_and_expires(&name, old_expires);
     let new_expires = old_expires + durations;
-    let new_token_id = join_name_and_expires(&name, new_expires);
 
     let old_token: NftInfoResponse<Metadata> =
         deps.querier.query(&QueryRequest::Wasm(WasmQuery::Smart {
             contract_addr: name_contract.to_string(),
             msg: to_binary(&aurans_name::QueryMsg::NftInfo {
-                token_id: old_token_id.clone(),
+                token_id: name.clone(),
             })?,
         }))?;
 
@@ -264,7 +260,7 @@ fn execute_extend(
     let burn_msg = WasmMsg::Execute {
         contract_addr: name_contract.to_string(),
         msg: to_binary(&aurans_name::ExecuteMsg::Burn {
-            token_id: old_token_id,
+            token_id: name.clone(),
         })?,
         funds: vec![],
     };
@@ -276,7 +272,7 @@ fn execute_extend(
     let mint_msg = WasmMsg::Execute {
         contract_addr: name_contract.to_string(),
         msg: to_binary(&aurans_name::ExecuteMsg::Mint {
-            token_id: new_token_id,
+            token_id: name.clone(),
             owner: info.sender.clone().to_string(),
             token_uri: old_token.token_uri,
             extension,
@@ -352,12 +348,11 @@ fn execute_register(
 
     // Call mint msg
     let name_contract = NAME_CONTRACT.load(deps.storage)?;
-    let token_id = join_name_and_expires(&name, expires_secs);
 
     let mint_msg = WasmMsg::Execute {
         contract_addr: name_contract.to_string(),
         msg: to_binary(&aurans_name::ExecuteMsg::Mint {
-            token_id,
+            token_id: name.clone(),
             owner: info.sender.to_string(),
             token_uri: None,
             extension: Metadata {
