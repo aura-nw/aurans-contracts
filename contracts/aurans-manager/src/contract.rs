@@ -369,6 +369,8 @@ fn execute_register(
                 royalty_payment_address: metadata.royalty_payment_address,
                 bech32_prefixes: bech32_prefixes.clone(),
                 durations,
+                collection_name: metadata.collection_name,
+                collection_symbol: metadata.collection_symbol,
             },
         })?,
         funds: vec![],

@@ -3,8 +3,8 @@
 set -e
 
 function main() {
-  backend_pubkey=AuwYyCUBxQiBGSUWebU46c+OrlApVsyGLHd4qhSDZeiG
-  admin=aura16ddu6kk4qqm2jcnfwgxm0zml4fhjaxf8fqjuqm
+  backend_pubkey=Arf1S41TvR4pG+i5FvrNFhzjiGqcavVFY5LBEBqgOExY
+  admin=aura14mkz8a04hytpsmqt2znv0l8fmluvmdhfj98ds3
 
   echo "admin: $admin"
   echo "backend_pubkey: $backend_pubkey"

@@ -36,6 +36,9 @@ pub struct Metadata {
 
     // Lifetime duration of nft in seconds
     pub durations: u64,
+
+    pub collection_name: Option<String>,
+    pub collection_symbol: Option<String>,
 }
 
 #[cw_serde]

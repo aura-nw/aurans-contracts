@@ -444,6 +444,18 @@
               "type": "string"
             }
           },
+          "collection_name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "collection_symbol": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
           "description": {
             "type": [
               "string",
