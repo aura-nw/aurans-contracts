@@ -26,6 +26,12 @@ pub enum ExecuteMsg {
     DeleteNames {
         names: Vec<String>,
     },
+    AddIgnoreAddress {
+        address: String,
+    },
+    RemoveIgnoreAddress {
+        address: String,
+    },
 }
 
 /// Message type for `migrate` entry_point
@@ -41,6 +47,9 @@ pub enum QueryMsg {
 
     #[returns(Addr)]
     NameContract {},
+
+    #[returns(bool)]
+    IsIgnoreAddress { address: String },
 
     #[returns(AddressResponse)]
     AddressOf {

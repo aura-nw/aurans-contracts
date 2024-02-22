@@ -75,6 +75,12 @@ pub fn execute(
             execute_update_name_contract(deps, env, info, name_contract)
         }
         ExecuteMsg::DeleteNames { names } => execute_delete_names(deps, env, info, names),
+        ExecuteMsg::AddIgnoreAddress { address } => {
+            execute_add_ignore_address(deps, env, info, address)
+        }
+        ExecuteMsg::RemoveIgnoreAddress { address } => {
+            execute_remove_ignore_address(deps, env, info, address)
+        }
     }
 }
 
@@ -83,6 +89,9 @@ pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<Binary> {
     match msg {
         QueryMsg::Config {} => to_binary(&query_config(deps)?),
         QueryMsg::NameContract {} => to_binary(&query_name_contract(deps)?),
+        QueryMsg::IsIgnoreAddress { address } => {
+            to_binary(&query_is_ignore_address(deps, address)?)
+        }
         QueryMsg::AddressOf {
             primary_name,
             bech32_prefix,
@@ -126,6 +135,43 @@ fn execute_update_config(
     Ok(Response::new()
         .add_attribute("action", "update_config")
         .add_attribute("admin", admin))
+}
+
+fn execute_add_ignore_address(
+    deps: DepsMut,
+    _env: Env,
+    info: MessageInfo,
+    address: String,
+) -> Result<Response, ContractError> {
+    let config = CONFIG.load(deps.storage)?;
+    if config.admin != info.sender {
+        return Err(ContractError::Unauthorized {});
+    }
+    IGNORE_ADDRS.save(deps.storage, &address, &true)?;
+    Ok(Response::new()
+        .add_attribute("action", "add_ignore_address")
+        .add_attribute("address", address))
+}
+
+fn execute_remove_ignore_address(
+    deps: DepsMut,
+    _env: Env,
+    info: MessageInfo,
+    address: String,
+) -> Result<Response, ContractError> {
+    let config = CONFIG.load(deps.storage)?;
+    if config.admin != info.sender {
+        return Err(ContractError::Unauthorized {});
+    }
+    if !IGNORE_ADDRS.has(deps.storage, &address) {
+        return Err(ContractError::Std(StdError::NotFound {
+            kind: format!("address not found in ignore addrs: {:?}", address),
+        }));
+    }
+    IGNORE_ADDRS.remove(deps.storage, &address);
+    Ok(Response::new()
+        .add_attribute("action", "remove_ignore_address")
+        .add_attribute("address", address))
 }
 
 fn execute_update_name_contract(
@@ -195,6 +241,11 @@ fn query_name_contract(deps: Deps) -> StdResult<Addr> {
     NAME_CONTRACT.load(deps.storage)
 }
 
+fn query_is_ignore_address(deps: Deps, address: String) -> StdResult<bool> {
+    let found = IGNORE_ADDRS.has(deps.storage, &address);
+    Ok(found)
+}
+
 fn query_address_of(
     deps: Deps,
     primary_name: String,
@@ -202,11 +253,8 @@ fn query_address_of(
 ) -> StdResult<AddressResponse> {
     let key = (primary_name.as_ref(), bech32_prefix.as_ref());
     let address = records().load(deps.storage, key)?;
-    let ignored = is_ignore_addr(deps, &deps.api.addr_validate(&address)?)?;
-    if ignored {
-        return Err(StdError::NotFound {
-            kind: "address in ignored address".to_owned(),
-        });
+    if IGNORE_ADDRS.has(deps.storage, &address) {
+        return Err(StdError::generic_err("address in ignored address"));
     }
     Ok(AddressResponse {
         address,
@@ -233,8 +281,7 @@ fn query_all_addresses_of(
 
     for record in records {
         let (bech32_prefix, address) = record;
-        let ignored = is_ignore_addr(deps, &deps.api.addr_validate(&address)?)?;
-        if ignored {
+        if IGNORE_ADDRS.has(deps.storage, &address) {
             continue;
         }
         addresses.push(AddressResponse {
@@ -252,11 +299,8 @@ fn query_names(
     start_after: Option<String>,
     limit: Option<u32>,
 ) -> StdResult<NamesResponse> {
-    let ignored = is_ignore_addr(deps, &deps.api.addr_validate(&owner)?)?;
-    if ignored {
-        return Err(StdError::NotFound {
-            kind: "address in ignored address".to_owned(),
-        });
+    if IGNORE_ADDRS.has(deps.storage, &owner) {
+        return Err(StdError::generic_err("address in ignored address"));
     }
     let limit = limit.unwrap_or(DEFAULT_LIMIT).min(MAX_LIMIT) as usize;
     let start = start_after.map(|s| Bound::ExclusiveRaw(s.into()));
@@ -291,10 +335,4 @@ fn can_execute(deps: Deps, config: &Config, sender: &Addr) -> Result<bool, Contr
     }
 
     Err(ContractError::Unauthorized {})
-}
-
-fn is_ignore_addr(deps: Deps, addr: &Addr) -> Result<bool, StdError> {
-    let ignore_addrs = IGNORE_ADDRS.load(deps.storage)?;
-    let found = ignore_addrs.iter().any(|x| x == addr);
-    Ok(found)
 }

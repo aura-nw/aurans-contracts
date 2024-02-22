@@ -32,6 +32,27 @@
     {
       "type": "object",
       "required": [
+        "is_ignore_address"
+      ],
+      "properties": {
+        "is_ignore_address": {
+          "type": "object",
+          "required": [
+            "address"
+          ],
+          "properties": {
+            "address": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "required": [
         "address_of"
       ],
       "properties": {

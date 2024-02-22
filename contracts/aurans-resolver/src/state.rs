@@ -1,6 +1,6 @@
 use cosmwasm_schema::cw_serde;
 use cosmwasm_std::Addr;
-use cw_storage_plus::{Index, IndexList, IndexedMap, Item, MultiIndex};
+use cw_storage_plus::{Index, IndexList, IndexedMap, Item, Map, MultiIndex};
 
 #[cw_serde]
 pub struct Config {
@@ -33,4 +33,4 @@ pub fn records<'a>() -> IndexedMap<'a, (&'a str, &'a str), String, RecordIndexes
 
 pub const NAME_CONTRACT: Item<Addr> = Item::new("name_contract");
 pub const CONFIG: Item<Config> = Item::new("config");
-pub const IGNORE_ADDRS: Item<Vec<Addr>> = Item::new("ignore_addrs");
+pub const IGNORE_ADDRS: Map<&str, bool> = Map::new("ignore_addrs");

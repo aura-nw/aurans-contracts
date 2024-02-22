@@ -119,6 +119,48 @@
           }
         },
         "additionalProperties": false
+      },
+      {
+        "type": "object",
+        "required": [
+          "add_ignore_address"
+        ],
+        "properties": {
+          "add_ignore_address": {
+            "type": "object",
+            "required": [
+              "address"
+            ],
+            "properties": {
+              "address": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "additionalProperties": false
+      },
+      {
+        "type": "object",
+        "required": [
+          "remove_ignore_address"
+        ],
+        "properties": {
+          "remove_ignore_address": {
+            "type": "object",
+            "required": [
+              "address"
+            ],
+            "properties": {
+              "address": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "additionalProperties": false
       }
     ]
   },
@@ -148,6 +190,27 @@
         "properties": {
           "name_contract": {
             "type": "object",
+            "additionalProperties": false
+          }
+        },
+        "additionalProperties": false
+      },
+      {
+        "type": "object",
+        "required": [
+          "is_ignore_address"
+        ],
+        "properties": {
+          "is_ignore_address": {
+            "type": "object",
+            "required": [
+              "address"
+            ],
+            "properties": {
+              "address": {
+                "type": "string"
+              }
+            },
             "additionalProperties": false
           }
         },
@@ -316,6 +379,11 @@
           "type": "string"
         }
       }
+    },
+    "is_ignore_address": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "Boolean",
+      "type": "boolean"
     },
     "name_contract": {
       "$schema": "http://json-schema.org/draft-07/schema#",
