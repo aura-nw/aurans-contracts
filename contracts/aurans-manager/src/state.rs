@@ -5,6 +5,7 @@ use cw_storage_plus::{Item, Map};
 #[cw_serde]
 pub struct Config {
     pub admin: Addr,
+    pub operator: Addr,
 
     pub name_code_id: u64,
     pub resolver_code_id: u64,

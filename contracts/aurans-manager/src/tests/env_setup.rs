@@ -96,6 +96,7 @@ pub mod env {
                 Addr::unchecked(ADMIN),
                 &ManagerInstantiateMsg {
                     admin: ADMIN.to_string(),
+                    operator: ADMIN.to_string(),
                     prices: vec![
                         (
                             0,

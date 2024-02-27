@@ -35,6 +35,7 @@ pub fn instantiate(
     // save contract config
     let config = Config {
         admin: deps.api.addr_validate(&msg.admin)?,
+        operator: deps.api.addr_validate(&msg.operator)?,
         name_code_id: msg.name_code_id,
         resolver_code_id: msg.resolver_code_id,
         max_year_register: msg.max_year_register,
@@ -106,6 +107,7 @@ pub fn execute(
     match msg {
         ExecuteMsg::UpdateConfig {
             admin,
+            operator,
             name_code_id,
             resolver_code_id,
             max_year_register,
@@ -114,6 +116,7 @@ pub fn execute(
             env,
             info,
             admin,
+            operator,
             name_code_id,
             resolver_code_id,
             max_year_register,
@@ -169,7 +172,7 @@ fn execute_unregister(
     names: Vec<String>,
 ) -> Result<Response, ContractError> {
     let config = CONFIG.load(deps.storage)?;
-    if info.sender != config.admin {
+    if info.sender != config.operator {
         return Err(ContractError::Unauthorized {});
     }
 
@@ -451,6 +454,7 @@ fn execute_update_config(
     _env: Env,
     info: MessageInfo,
     admin: String,
+    operator: String,
     name_code_id: u64,
     resolver_code_id: u64,
     max_year_register: u64,
@@ -464,6 +468,7 @@ fn execute_update_config(
     // update config
     let new_config = Config {
         admin: deps.api.addr_validate(&admin)?,
+        operator: deps.api.addr_validate(&operator)?,
         name_code_id,
         resolver_code_id,
         max_year_register,
@@ -473,6 +478,7 @@ fn execute_update_config(
     Ok(Response::new()
         .add_attribute("action", "update_config")
         .add_attribute("admin", admin.to_string())
+        .add_attribute("operator", operator.to_string())
         .add_attribute("name_code_id", name_code_id.to_string())
         .add_attribute("resolver_code_id", resolver_code_id.to_string())
         .add_attribute("max_year_register", max_year_register.to_string()))

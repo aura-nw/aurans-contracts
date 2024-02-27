@@ -12,6 +12,7 @@
       "backend_pubkey",
       "max_year_register",
       "name_code_id",
+      "operator",
       "prices",
       "resolver_code_id"
     ],
@@ -31,6 +32,9 @@
         "type": "integer",
         "format": "uint64",
         "minimum": 0.0
+      },
+      "operator": {
+        "type": "string"
       },
       "prices": {
         "type": "array",
@@ -100,6 +104,7 @@
               "admin",
               "max_year_register",
               "name_code_id",
+              "operator",
               "resolver_code_id"
             ],
             "properties": {
@@ -115,6 +120,9 @@
                 "type": "integer",
                 "format": "uint64",
                 "minimum": 0.0
+              },
+              "operator": {
+                "type": "string"
               },
               "resolver_code_id": {
                 "type": "integer",
@@ -539,6 +547,7 @@
         "admin",
         "max_year_register",
         "name_code_id",
+        "operator",
         "resolver_code_id"
       ],
       "properties": {
@@ -554,6 +563,9 @@
           "type": "integer",
           "format": "uint64",
           "minimum": 0.0
+        },
+        "operator": {
+          "$ref": "#/definitions/Addr"
         },
         "resolver_code_id": {
           "type": "integer",

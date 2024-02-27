@@ -8,6 +8,7 @@ use crate::state::{Config, Verifier};
 #[cw_serde]
 pub struct InstantiateMsg {
     pub admin: String,
+    pub operator: String,
     pub prices: Vec<(u8, Coin)>,
     pub backend_pubkey: Binary,
     pub name_code_id: u64,
@@ -20,6 +21,7 @@ pub struct InstantiateMsg {
 pub enum ExecuteMsg {
     UpdateConfig {
         admin: String,
+        operator: String,
         name_code_id: u64,
         resolver_code_id: u64,
         max_year_register: u64,

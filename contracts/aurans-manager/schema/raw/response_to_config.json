@@ -6,6 +6,7 @@
     "admin",
     "max_year_register",
     "name_code_id",
+    "operator",
     "resolver_code_id"
   ],
   "properties": {
@@ -21,6 +22,9 @@
       "type": "integer",
       "format": "uint64",
       "minimum": 0.0
+    },
+    "operator": {
+      "$ref": "#/definitions/Addr"
     },
     "resolver_code_id": {
       "type": "integer",
