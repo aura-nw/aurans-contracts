@@ -5,8 +5,10 @@ set -e
 function main() {
   backend_pubkey=AuwYyCUBxQiBGSUWebU46c+OrlApVsyGLHd4qhSDZeiG
   admin=aura16ddu6kk4qqm2jcnfwgxm0zml4fhjaxf8fqjuqm
+  operator=aura19fmuecv5gk2m5pmh5m3gg5g675fu8mnz6gwwug
 
   echo "admin: $admin"
+  echo "operator: $operator"
   echo "backend_pubkey: $backend_pubkey"
 
   resolver_store_txhash=$(aurad tx wasm store artifacts/aurans_resolver.wasm --from admin --fees 25000uaura --gas 5000000 --output json -y | jq -r '.txhash')
@@ -24,7 +26,7 @@ function main() {
   manager_code_id=$(aurad query tx $manager_store_txhash --output json | jq -r '.logs[0].events[-1].attributes[-1].value')
   echo "manager_code_id: $manager_code_id"
 
-  init_manager="{\"admin\":\"$admin\",\"max_year_register\":5,\"prices\":[[0,{\"denom\":\"uaura\",\"amount\":\"100\"}],[1,{\"denom\":\"uaura\",\"amount\":\"1000\"}],[2,{\"denom\":\"uaura\",\"amount\":\"800\"}],[3,{\"denom\":\"uaura\",\"amount\":\"500\"}],[4,{\"denom\":\"uaura\",\"amount\":\"300\"}]],\"backend_pubkey\":\"$backend_pubkey\",\"name_code_id\":$name_code_id,\"resolver_code_id\":$resolver_code_id}"
+  init_manager="{\"admin\":\"$admin\",\"operator\":\"$operator\",\"max_year_register\":5,\"prices\":[[0,{\"denom\":\"uaura\",\"amount\":\"100\"}],[1,{\"denom\":\"uaura\",\"amount\":\"1000\"}],[2,{\"denom\":\"uaura\",\"amount\":\"800\"}],[3,{\"denom\":\"uaura\",\"amount\":\"500\"}],[4,{\"denom\":\"uaura\",\"amount\":\"300\"}]],\"backend_pubkey\":\"$backend_pubkey\",\"name_code_id\":$name_code_id,\"resolver_code_id\":$resolver_code_id}"
 
   ins_manager_txhash=$(aurad tx wasm instantiate $manager_code_id "$init_manager" --label "aurans-manager" --from admin --fees 25000uaura --gas 5000000 --output json -y --no-admin | jq -r '.txhash')
   sleep 7
